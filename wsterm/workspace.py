@@ -105,12 +105,13 @@ class Workspace(object):
         if os.path.isdir(dir_path):
             shutil.rmtree(dir_path)
 
-    def write_file(self, path, data):
+    def write_file(self, path, data, overwrite=True):
         file_path = os.path.join(self._root_path, path.replace("/", os.path.sep))
         dir_path = os.path.dirname(file_path)
         if not os.path.isdir(dir_path):
             os.makedirs(dir_path)
-        with open(file_path, "wb") as fp:
+        flag = "wb" if overwrite else "ab"
+        with open(file_path, flag) as fp:
             fp.write(data)
 
     def remove_file(self, path):
@@ -154,7 +155,16 @@ class Workspace(object):
         gitignore_path = os.path.join(self._root_path, ".gitignore")
         if os.path.isfile(gitignore_path):
             matches = gitignore_parser.parse_gitignore(gitignore_path)
-            if matches(root):
+            match = False
+            try:
+                match = matches(root)
+            except ValueError:
+                utils.logger.info(
+                    "[%s] Ignore invalid path %s" % (self.__class__.__name__, root)
+                )
+                return None
+
+            if match:
                 utils.logger.debug(
                     "[%s] Path %s ignored" % (self.__class__.__name__, root)
                 )

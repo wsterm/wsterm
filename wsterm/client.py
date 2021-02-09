@@ -59,13 +59,11 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
             if self._connected == None:
                 await asyncio.sleep(0.005)
                 continue
-            asyncio.ensure_future(self.polling_packet_task())
-            return self._connected
-        else:
-            utils.logger.warn(
-                "[%s] Connect %s timeout" % (self.__class__.__name__, self._url)
-            )
-            return False
+            if self._connected:
+                asyncio.ensure_future(self.polling_packet_task())
+                return True
+            break
+        raise utils.ConnectWebsocketServerFailed("Connect %s timeout" % self._url)
 
     def on_message(self, message):
         if not message:
@@ -131,6 +129,8 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
 class WSTerminalClient(object):
     """Websocket Teminal Client"""
 
+    file_fragment_size = 4 * 1024 * 1024
+
     def __init__(self, url, token=None, timeout=15, loop=None):
         headers = {}
         if token:
@@ -142,13 +142,18 @@ class WSTerminalClient(object):
         self._running = True
 
     async def connect(self):
-        if not await self._conn.wait_for_connecting():
-            raise utils.ConnectWebsocketServerFailed()
+        return await self._conn.wait_for_connecting()
 
     async def create_directory(self, dir_path):
+        utils.logger.info(
+            "[%s] Create directory %s" % (self.__class__.__name__, dir_path)
+        )
         await self._conn.send_request(proto.EnumCommand.CREATE_DIR, path=dir_path)
 
     async def remove_directory(self, dir_path):
+        utils.logger.info(
+            "[%s] Remove directory %s" % (self.__class__.__name__, dir_path)
+        )
         await self._conn.send_request(proto.EnumCommand.REMOVE_DIR, path=dir_path)
 
     async def update_workspace(self, dir_tree, root):
@@ -166,7 +171,6 @@ class WSTerminalClient(object):
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
-            utils.logger.debug("[%s] Update file %s" % (self.__class__.__name__, path))
             if dir_tree["files"][name] == "-":
                 # Remove file
                 await self.remove_file(path)
@@ -174,32 +178,38 @@ class WSTerminalClient(object):
                 await self.write_file(path)
 
     async def write_file(self, file_path):
+        utils.logger.debug("[%s] Write file %s" % (self.__class__.__name__, file_path))
+        offset = 0
         with open(self._workspace.join_path(file_path), "rb") as fp:
-            data = fp.read()
-            await self._conn.send_request(
-                proto.EnumCommand.WRITE_FILE, path=file_path, data=data
-            )
+            while True:
+                data = fp.read(self.file_fragment_size)
+                if not data:
+                    break
+                await self._conn.send_request(
+                    proto.EnumCommand.WRITE_FILE,
+                    path=file_path,
+                    data=data,
+                    overwrite=offset == 0,
+                )
+                offset += len(data)
 
     async def remove_file(self, file_path):
+        utils.logger.info("[%s] Remove file %s" % (self.__class__.__name__, file_path))
         await self._conn.send_request(proto.EnumCommand.REMOVE_FILE, path=file_path)
 
     async def on_directory_created(self, path):
-        utils.logger.info("[%s] Create directory %s" % (self.__class__.__name__, path))
         await self.create_directory(path)
 
     async def on_directory_removed(self, path):
-        utils.logger.info("[%s] Remove directory %s" % (self.__class__.__name__, path))
         await self.remove_directory(path)
 
     async def on_file_created(self, path):
         pass
 
     async def on_file_modified(self, path):
-        utils.logger.info("[%s] Write file %s" % (self.__class__.__name__, path))
         await self.write_file(path)
 
     async def on_file_removed(self, path):
-        utils.logger.info("[%s] Remove file %s" % (self.__class__.__name__, path))
         await self.remove_file(path)
 
     async def sync_workspace(self, workspace_path):
@@ -236,7 +246,7 @@ class WSTerminalClient(object):
         if response["code"]:
             raise RuntimeError("Create shell failed: %s" % response["message"])
         if sys.platform != "win32":
-            self._shell_stdin = utils.StdIn()
+            self._shell_stdin = utils.UnixStdIn()
 
             def on_input():
                 char = self._shell_stdin.read(1)
@@ -264,8 +274,6 @@ class WSTerminalClient(object):
                                 r"[%s] Unknown input key \xe0%s"
                                 % (self.__class__.__name__, char)
                             )
-                    # if char == b"\r":
-                    #     char += b"\n"
                     asyncio.ensure_future(self.write_shell_stdin(char))
                 else:
                     await asyncio.sleep(0.005)

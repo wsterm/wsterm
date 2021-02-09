@@ -49,7 +49,15 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         return await self.write_message(packet.serialize(), True)
 
     async def handle_request(self, request):
-        utils.logger.debug("[%s] %s" % (self.__class__.__name__, request))
+        utils.logger.debug(
+            "[%s][Request][%d][%s] %s"
+            % (
+                self.__class__.__name__,
+                request.get("id", 0),
+                request.get("command"),
+                str(request)[:200],
+            )
+        )
         if request["command"] == proto.EnumCommand.SYNC_WORKSPACE:
             worksapce_id = request["workspace"]
             workspace_path = os.path.join(
@@ -65,7 +73,9 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             utils.logger.info(
                 "[%s] Update file %s" % (self.__class__.__name__, request["path"])
             )
-            self._workspace.write_file(request["path"], request["data"])
+            self._workspace.write_file(
+                request["path"], request["data"], request["overwrite"]
+            )
         elif self._workspace and request["command"] == proto.EnumCommand.REMOVE_FILE:
             utils.logger.info(
                 "[%s] Remove file %s" % (self.__class__.__name__, request["path"])
@@ -93,7 +103,9 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 shell_workspace = os.getcwd()
                 if self._workspace:
                     shell_workspace = self._workspace.path
-                asyncio.ensure_future(self.spawn_shell(shell_workspace, request["size"]))
+                asyncio.ensure_future(
+                    self.spawn_shell(shell_workspace, request["size"])
+                )
         elif request["command"] == proto.EnumCommand.WRITE_STDIN:
             if not self._shell:
                 await self.send_response(request, code=-1, message="Shell not create")
