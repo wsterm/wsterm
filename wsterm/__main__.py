@@ -73,13 +73,14 @@ def main():
     else:
         if sys.platform == "win32":
             utils.enable_native_ansi()
-        asyncio.ensure_future(connect_server(args.url, args.workspace))
+        asyncio.get_event_loop().run_until_complete(
+            connect_server(args.url, args.workspace)
+        )
 
     try:
         tornado.ioloop.IOLoop.current().start()
     except KeyboardInterrupt:
         print("Process exit warmly.")
-
 
 if __name__ == "__main__":
     sys.exit(main())
