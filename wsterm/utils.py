@@ -94,21 +94,19 @@ class Process(object):
                 break
 
 
-class StdIn(object):
+class UnixStdIn(object):
     def __init__(self):
         self._fd = sys.stdin.fileno()
-        if sys.platform != "win32":
-            import termios
-            import tty
+        import termios
+        import tty
 
-            self._settings = termios.tcgetattr(self._fd)
-            tty.setraw(self._fd)
+        self._settings = termios.tcgetattr(self._fd)
+        tty.setraw(self._fd)
 
     def __del__(self):
-        if sys.platform != "win32":
-            import termios
+        import termios
 
-            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._settings)
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._settings)
 
     def fileno(self):
         return self._fd
