@@ -131,7 +131,7 @@ def safe_ensure_future(coro, loop=None):
 
 def enable_native_ansi():
     """Enables native ANSI sequences in console. Windows 10 only.
-  Returns whether successful.
+    Returns whether successful.
     """
     import ctypes.wintypes
 
@@ -185,4 +185,3 @@ def diff(data1, data2):
             # 已删除的节点
             result[key] = "-"
     return result
-
