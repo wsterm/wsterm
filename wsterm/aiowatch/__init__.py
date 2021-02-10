@@ -33,6 +33,14 @@ class WatchEvent(object):
         self._event = event
         self._target = target
 
+    def __str__(self):
+        return "<%s object event=%s target=%s at 0x%x>" % (
+            self.__class__.__name__,
+            self._event,
+            self._target,
+            id(self),
+        )
+
     @property
     def event(self):
         return self._event
@@ -58,6 +66,10 @@ class AIOWatcher(object):
             from . import win32
 
             return win32.Win32Watcher()
+        elif sys.platform == "darwin":
+            from . import kevents
+
+            return kevents.KEventsWatcher()
         else:
             raise NotImplementedError(sys.platform)
 
