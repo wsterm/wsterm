@@ -1,4 +1,5 @@
 msgpack
+python-daemon
 tornado
 gitignore_parser
 pywin32; sys_platform == 'win32'
