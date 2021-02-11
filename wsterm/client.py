@@ -62,7 +62,8 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
             if self._connected:
                 asyncio.ensure_future(self.polling_packet_task())
                 return True
-            break
+            else:
+                return False
         raise utils.ConnectWebsocketServerFailed("Connect %s timeout" % self._url)
 
     def on_message(self, message):
@@ -167,7 +168,8 @@ class WSTerminalClient(object):
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name], path,
+                    dir_tree["dirs"][name],
+                    path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
@@ -220,7 +222,8 @@ class WSTerminalClient(object):
             "%s%s" % (socket.gethostname(), workspace_path)
         )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_hash,
+            proto.EnumCommand.SYNC_WORKSPACE,
+            workspace=workspace_hash,
         )
         response = await self._conn.read_response(request)
         diff_result = self._workspace.make_diff(response["data"])
@@ -240,7 +243,8 @@ class WSTerminalClient(object):
 
     async def create_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.CREATE_SHELL, size=size,
+            proto.EnumCommand.CREATE_SHELL,
+            size=size,
         )
         response = await self._conn.read_response(request)
         if response["code"]:
@@ -277,4 +281,3 @@ class WSTerminalClient(object):
                     asyncio.ensure_future(self.write_shell_stdin(char))
                 else:
                     await asyncio.sleep(0.005)
-

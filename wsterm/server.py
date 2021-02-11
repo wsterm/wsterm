@@ -9,8 +9,20 @@ import tornado.websocket
 from . import proto, shell, utils, workspace
 
 
+class WebSocketProtocol(tornado.websocket.WebSocketProtocol13):
+    async def accept_connection(self, handler):
+        if self.handler.check_permission():
+            await super(WebSocketProtocol, self).accept_connection(handler)
+        else:
+            handler.set_status(403)
+            log_msg = "Authorization Failed"
+            handler.finish(log_msg)
+
+
 class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
     """Websocket Terminal Server Handler"""
+
+    token = None
 
     def __init__(self, *args, **kwargs):
         super(WSTerminalServerHandler, self).__init__(*args, **kwargs)
@@ -18,6 +30,28 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         self._workspace = None
         self._shell = None
         self._sequence = 0x10000
+
+    def check_permission(self):
+        if self.token:
+            auth = self.request.headers.get("Authorization", "")
+            print(auth, self.token)
+            if auth.startswith("Token "):
+                return auth.split()[-1].strip() == self.token
+            else:
+                return False
+        return True
+
+    def get_websocket_protocol(self):
+        """Override to connect target server"""
+        websocket_version = self.request.headers.get("Sec-WebSocket-Version")
+        if websocket_version in ("7", "8", "13"):
+            params = tornado.websocket._WebSocketParams(
+                ping_interval=self.ping_interval,
+                ping_timeout=self.ping_timeout,
+                max_message_size=self.max_message_size,
+                compression_options=self.get_compression_options(),
+            )
+            return WebSocketProtocol(self, mask_outgoing=True, params=params)
 
     async def on_message(self, message):
         self._buffer += message
@@ -67,7 +101,8 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             self._workspace = workspace.Workspace(workspace_path)
             data = self._workspace.snapshot()
             await self.send_response(
-                request, data=data,
+                request,
+                data=data,
             )
         elif self._workspace and request["command"] == proto.EnumCommand.WRITE_FILE:
             utils.logger.info(
@@ -156,8 +191,9 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         pass
 
 
-def start_server(listen_address, path):
+def start_server(listen_address, path, token=None):
     utils.logger.info("Websocket server listening at %s:%d" % listen_address)
+    WSTerminalServerHandler.token = token
     handlers = [
         (path, WSTerminalServerHandler),
     ]
