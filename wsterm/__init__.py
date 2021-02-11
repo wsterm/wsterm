@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Websocket Terminal
+"""Websocket Remote Terminal
 """
+
+VERSION = "0.1.0"
