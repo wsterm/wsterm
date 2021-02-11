@@ -4,6 +4,8 @@
 import argparse
 import asyncio
 import logging
+import logging.handlers
+import os
 import sys
 import urllib.parse
 
@@ -12,14 +14,20 @@ import tornado.ioloop
 from . import client, server, utils
 
 
-async def connect_server(url, workspace):
-    cli = client.WSTerminalClient(url)
-    await cli.connect()
+async def connect_server(url, workspace, token=None):
+    cli = client.WSTerminalClient(url, token=token)
+    if not await cli.connect():
+        print(
+            "Connect websocket server failed, pls check token is valid", file=sys.stderr
+        )
+        return False
+
     if workspace:
         print("Sync workspace to remote host...")
         await cli.sync_workspace(workspace)
         print("Sync workspace complete")
     await cli.create_shell((100, 40))
+    return True
 
 
 def main():
@@ -38,6 +46,10 @@ def main():
         choices=("debug", "info", "warn", "error"),
         default="info",
     )
+    parser.add_argument("--log-file", help="Path to save log")
+    parser.add_argument(
+        "-d", "--daemon", help="Run as daemon", action="store_true", default=False
+    )
 
     args = sys.argv[1:]
     if not args:
@@ -45,6 +57,28 @@ def main():
         return 0
 
     args = parser.parse_args(args)
+
+    url = urllib.parse.urlparse(args.url)
+    if url.scheme != "ws":
+        print("Error: Invalid websocket url %s" % args.url, file=sys.stderr)
+        return -1
+
+    log_file = None
+    if args.log_file:
+        log_file = os.path.abspath(args.log_file)
+
+    if args.daemon:
+        if not args.server:
+            print("Error: -d/--daemon only supported on server", file=sys.stderr)
+            return -1
+
+        if sys.platform != "win32":
+            import daemon
+
+            daemon.DaemonContext(stderr=open("error.txt", "w")).open()
+        else:
+            utils.win32_daemon()
+            return 0
 
     handler = logging.StreamHandler()
     formatter = logging.Formatter("[%(asctime)s][%(levelname)s]%(message)s")
@@ -62,20 +96,27 @@ def main():
     utils.logger.propagate = 0
     utils.logger.addHandler(handler)
 
-    url = urllib.parse.urlparse(args.url)
-    if url.scheme != "ws":
-        raise ValueError("Invalid url protocol %s" % url.scheme)
+    if log_file:
+        handler = logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=10 * 1024 * 1024, backupCount=4
+        )
+        formatter = logging.Formatter(
+            "[%(asctime)s][%(levelname)s][%(filename)s][%(lineno)d]%(message)s"
+        )
+        handler.setFormatter(formatter)
+        utils.logger.addHandler(handler)
 
     if args.server:
         host = url.hostname
         port = url.port or 80
-        server.start_server((host, port), url.path)
+        server.start_server((host, port), url.path, args.token)
     else:
         if sys.platform == "win32":
             utils.enable_native_ansi()
-        asyncio.get_event_loop().run_until_complete(
-            connect_server(args.url, args.workspace)
-        )
+        if not asyncio.get_event_loop().run_until_complete(
+            connect_server(args.url, args.workspace, args.token)
+        ):
+            return -1
 
     try:
         tornado.ioloop.IOLoop.current().start()
