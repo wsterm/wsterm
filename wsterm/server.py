@@ -34,7 +34,6 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
     def check_permission(self):
         if self.token:
             auth = self.request.headers.get("Authorization", "")
-            print(auth, self.token)
             if auth.startswith("Token "):
                 return auth.split()[-1].strip() == self.token
             else:
