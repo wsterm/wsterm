@@ -95,8 +95,8 @@ class Process(object):
 
 
 class UnixStdIn(object):
-    def __init__(self):
-        self._fd = sys.stdin.fileno()
+    def __init__(self, stdin=None):
+        self._fd = stdin or sys.stdin.fileno()
         import termios
         import tty
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import sys
 
 import tornado.web
 import tornado.websocket
@@ -133,7 +134,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             if self._shell:
                 await self.send_response(request, code=-1, message="Shell is created")
             else:
-                await self.send_response(request)
+                await self.send_response(request, platform=sys.platform)
                 shell_workspace = os.getcwd()
                 if self._workspace:
                     shell_workspace = self._workspace.path
@@ -150,6 +151,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 self._shell.write(request["buffer"])
 
     async def write_shell_stdout(self, buffer):
+        utils.logger.debug("[%s] Output %s" % (self.__class__.__name__, buffer))
         await self.send_request(proto.EnumCommand.WRITE_STDOUT, buffer=buffer)
 
     async def spawn_shell(self, workspace, size):
