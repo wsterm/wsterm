@@ -98,12 +98,16 @@ class UnixStdIn(object):
     def __init__(self, stdin=None):
         self._fd = stdin or sys.stdin.fileno()
         import termios
-        import tty
 
         self._settings = termios.tcgetattr(self._fd)
-        tty.setraw(self._fd)
 
-    def __del__(self):
+    def __enter__(self):
+        import tty
+
+        tty.setraw(self._fd)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_trackback):
         import termios
 
         termios.tcsetattr(self._fd, termios.TCSADRAIN, self._settings)
@@ -186,6 +190,7 @@ def diff(data1, data2):
             result[key] = "-"
     return result
 
+
 def win32_daemon():
     cmdline = []
     for it in sys.argv:
@@ -193,8 +198,4 @@ def win32_daemon():
             cmdline.append(it)
 
     DETACHED_PROCESS = 8
-    subprocess.Popen(
-        cmdline,
-        creationflags=DETACHED_PROCESS,
-        close_fds=True
-    )
+    subprocess.Popen(cmdline, creationflags=DETACHED_PROCESS, close_fds=True)
