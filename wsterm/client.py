@@ -242,6 +242,7 @@ class WSTerminalClient(object):
             self._shell_stdin = None
 
         async def exit_loop():
+            await asyncio.sleep(0.01)
             self._loop.stop()
 
         asyncio.ensure_future(exit_loop())
@@ -256,19 +257,22 @@ class WSTerminalClient(object):
             raise RuntimeError("Create shell failed: %s" % response["message"])
         server_platform = response["platform"]
         if sys.platform != "win32":
-            self._shell_stdin = utils.UnixStdIn()
+            with utils.UnixStdIn() as self._shell_stdin:
 
-            def on_input():
-                char = self._shell_stdin.read(1)
-                if char == b"\n":
-                    char = b"\r"
-                if server_platform == "win32":
-                    if char == b"\x1b":
-                        chars = self._shell_stdin.read(2)
-                        char += chars  # Must send together
-                utils.safe_ensure_future(self.write_shell_stdin(char))
+                def on_input():
+                    char = self._shell_stdin.read(1)
+                    if char == b"\n":
+                        char = b"\r"
+                    if server_platform == "win32":
+                        if char == b"\x1b":
+                            chars = self._shell_stdin.read(2)
+                            char += chars  # Must send together
+                    utils.safe_ensure_future(self.write_shell_stdin(char))
 
-            self._loop.add_reader(self._shell_stdin, on_input)
+                self._loop.add_reader(self._shell_stdin, on_input)
+
+                while self._running:
+                    await asyncio.sleep(0.005)
         else:
             import msvcrt
 
