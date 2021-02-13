@@ -75,8 +75,17 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
             if packet:
                 self._queue.put_nowait(packet.message)
 
+    def on_connection_close(self):
+        self._closed = True
+        if self._handler:
+            self._handler.on_connection_close()
+
     async def polling_packet_task(self):
         while not self._closed:
+            if self._queue.empty():
+                # Ensure the task exit in time
+                await asyncio.sleep(0.005)
+                continue
             packet = await self._queue.get()
             if packet["type"] == proto.EnumPacketType.REQUEST:
                 await self.handle_request(packet)
@@ -139,8 +148,11 @@ class WSTerminalClient(object):
         self._conn = WSTerminalConnection(url, headers, timeout, handler=self)
         self._loop = loop or asyncio.get_event_loop()
         self._workspace = None
-        self._shell_stdin = None
         self._running = True
+
+    def on_connection_close(self):
+        utils.logger.warn("[%s] Websocket connection closed" % self.__class__.__name__)
+        self.on_shell_exit()
 
     async def connect(self):
         return await self._conn.wait_for_connecting()
@@ -233,13 +245,16 @@ class WSTerminalClient(object):
         asyncio.ensure_future(self._workspace.watch())
 
     async def write_shell_stdin(self, buffer):
-        await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
+        try:
+            await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
+        except tornado.websocket.WebSocketClosedError:
+            utils.logger.error(
+                "[%s] Websocket connection lost" % self.__class__.__name__
+            )
+            self.on_connection_close()
 
     def on_shell_exit(self):
         self._running = False
-        if self._shell_stdin:
-            self._loop.remove_reader(self._shell_stdin)
-            self._shell_stdin = None
 
         async def exit_loop():
             await asyncio.sleep(0.01)
@@ -257,22 +272,23 @@ class WSTerminalClient(object):
             raise RuntimeError("Create shell failed: %s" % response["message"])
         server_platform = response["platform"]
         if sys.platform != "win32":
-            with utils.UnixStdIn() as self._shell_stdin:
+            with utils.UnixStdIn() as shell_stdin:
 
                 def on_input():
-                    char = self._shell_stdin.read(1)
+                    char = shell_stdin.read(1)
                     if char == b"\n":
                         char = b"\r"
                     if server_platform == "win32":
                         if char == b"\x1b":
-                            chars = self._shell_stdin.read(2)
+                            chars = shell_stdin.read(2)
                             char += chars  # Must send together
                     utils.safe_ensure_future(self.write_shell_stdin(char))
 
-                self._loop.add_reader(self._shell_stdin, on_input)
+                self._loop.add_reader(shell_stdin, on_input)
 
                 while self._running:
                     await asyncio.sleep(0.005)
+                self._loop.remove_reader(shell_stdin)
         else:
             import msvcrt
 
