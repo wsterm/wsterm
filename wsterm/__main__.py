@@ -6,7 +6,9 @@ import asyncio
 import logging
 import logging.handlers
 import os
+import shutil
 import sys
+import traceback
 import urllib.parse
 
 import tornado.ioloop
@@ -26,7 +28,8 @@ async def connect_server(url, workspace, token=None):
         print("Sync workspace to remote host...")
         await cli.sync_workspace(workspace)
         print("Sync workspace complete")
-    await cli.create_shell((100, 40))
+    terminal_size = shutil.get_terminal_size((120, 30))
+    await cli.create_shell((terminal_size.columns, terminal_size.lines))
     return True
 
 
@@ -109,14 +112,34 @@ def main():
     if args.server:
         host = url.hostname
         port = url.port or 80
+        if sys.platform == "win32":
+            loop = asyncio.ProactorEventLoop()
+            asyncio.set_event_loop(loop)
         server.start_server((host, port), url.path, args.token)
     else:
         if sys.platform == "win32":
             utils.enable_native_ansi()
+
         if not asyncio.get_event_loop().run_until_complete(
             connect_server(args.url, args.workspace, args.token)
         ):
             return -1
+
+    def handle_exception(loop, context):
+        print("Exception caught:\n", file=sys.stderr)
+        message = context["message"]
+        exp = context.get("exception")
+        if exp:
+            message = "".join(
+                traceback.format_exception(
+                    etype=type(exp), value=exp, tb=exp.__traceback__
+                )
+            )
+        print(message, file=sys.stderr)
+        loop.stop()
+
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(handle_exception)
 
     try:
         tornado.ioloop.IOLoop.current().start()

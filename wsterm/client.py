@@ -236,10 +236,15 @@ class WSTerminalClient(object):
         await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
 
     def on_shell_exit(self):
+        self._running = False
         if self._shell_stdin:
             self._loop.remove_reader(self._shell_stdin)
             self._shell_stdin = None
+
+        async def exit_loop():
             self._loop.stop()
+
+        asyncio.ensure_future(exit_loop())
 
     async def create_shell(self, size):
         request = await self._conn.send_request(
@@ -249,12 +254,19 @@ class WSTerminalClient(object):
         response = await self._conn.read_response(request)
         if response["code"]:
             raise RuntimeError("Create shell failed: %s" % response["message"])
+        server_platform = response["platform"]
         if sys.platform != "win32":
             self._shell_stdin = utils.UnixStdIn()
 
             def on_input():
                 char = self._shell_stdin.read(1)
-                asyncio.ensure_future(self.write_shell_stdin(char))
+                if char == b"\n":
+                    char = b"\r"
+                if server_platform == "win32":
+                    if char == b"\x1b":
+                        chars = self._shell_stdin.read(2)
+                        char += chars  # Must send together
+                utils.safe_ensure_future(self.write_shell_stdin(char))
 
             self._loop.add_reader(self._shell_stdin, on_input)
         else:
@@ -278,6 +290,9 @@ class WSTerminalClient(object):
                                 r"[%s] Unknown input key \xe0%s"
                                 % (self.__class__.__name__, char)
                             )
+                    elif char == b"\x1d":
+                        # Ctrl + ]
+                        char = b"\x03"
                     asyncio.ensure_future(self.write_shell_stdin(char))
                 else:
                     await asyncio.sleep(0.005)
