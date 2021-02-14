@@ -84,11 +84,7 @@ class Win32Watcher(WatcherBackendBase):
 
     def _add_dir_watch(self, handle, buffer, ov):
         win32file.ReadDirectoryChangesW(
-            handle,
-            buffer,
-            True,
-            win32con.FILE_NOTIFY_CHANGE_DIR_NAME,
-            ov,
+            handle, buffer, True, win32con.FILE_NOTIFY_CHANGE_DIR_NAME, ov,
         )
 
     def add_dir_watch(self, path):
@@ -229,10 +225,11 @@ class Win32Watcher(WatcherBackendBase):
             await asyncio.sleep(0.005)
 
     async def read_event(self):
+        move_from = None
         while True:
             target, watch_type, action = await self._event_queue.get()
             isdir = watch_type == EnumWatchType.WATCH_DIRECTORY
-            if action in (FILE_ACTION_ADDED, FILE_ACTION_RENAMED_NEW_NAME):
+            if action == FILE_ACTION_ADDED:
                 if isdir:
                     return WatchEvent(WatchEvent.DIRECTORY_CREATED, target)
                 else:
@@ -240,8 +237,12 @@ class Win32Watcher(WatcherBackendBase):
             elif action == FILE_ACTION_MODIFIED:
                 if not isdir:
                     return WatchEvent(WatchEvent.FILE_MODIFIED, target)
-            elif action in (FILE_ACTION_REMOVED, FILE_ACTION_RENAMED_OLD_NAME):
+            elif action == FILE_ACTION_REMOVED:
                 if isdir:
                     return WatchEvent(WatchEvent.DIRECTORY_REMOVED, target)
                 else:
                     return WatchEvent(WatchEvent.FILE_REMOVED, target)
+            elif action == FILE_ACTION_RENAMED_OLD_NAME:
+                move_from = target
+            elif action == FILE_ACTION_RENAMED_NEW_NAME:
+                return WatchEvent(WatchEvent.ITEM_MOVED, (move_from, target))

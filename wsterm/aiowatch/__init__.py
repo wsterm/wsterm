@@ -28,6 +28,7 @@ class WatchEvent(object):
     FILE_CREATED = 2
     FILE_MODIFIED = 3
     FILE_REMOVED = 4
+    ITEM_MOVED = 5
 
     def __init__(self, event, target):
         self._event = event
@@ -83,7 +84,14 @@ class AIOWatcher(object):
         self.add_dir_watch(self._root_path)
         while self._running:
             event = await self._backend.read_event()
-            target = event.target[len(self._root_path) + 1 :]
+            if isinstance(event.target, str):
+                target = event.target[len(self._root_path) + 1 :]
+            else:
+                target = (
+                    event.target[0][len(self._root_path) + 1 :],
+                    event.target[1][len(self._root_path) + 1 :],
+                )
+
             if event.event == WatchEvent.DIRECTORY_CREATED:
                 self._handler.on_directory_created(target)
             elif event.event == WatchEvent.DIRECTORY_REMOVED:
@@ -94,5 +102,7 @@ class AIOWatcher(object):
                 self._handler.on_file_modified(target)
             elif event.event == WatchEvent.FILE_REMOVED:
                 self._handler.on_file_removed(target)
+            elif event.event == WatchEvent.ITEM_MOVED:
+                self._handler.on_item_moved(*target)
             else:
                 raise NotImplementedError(event.event)

@@ -158,6 +158,7 @@ class INotifyWatcher(WatcherBackendBase):
         self._watch_list = {}
 
     async def read_event(self):
+        move_from = None
         while True:
             target, mask = await self._event_queue.get()
             isdir = mask & InotifyConstants.IN_ISDIR
@@ -174,6 +175,15 @@ class INotifyWatcher(WatcherBackendBase):
                     return WatchEvent(WatchEvent.DIRECTORY_REMOVED, target)
                 else:
                     return WatchEvent(WatchEvent.FILE_REMOVED, target)
+            elif (
+                mask & InotifyConstants.IN_MOVE
+                and mask & InotifyConstants.IN_MOVED_FROM
+            ):
+                move_from = target
+            elif (
+                mask & InotifyConstants.IN_MOVE and mask & InotifyConstants.IN_MOVED_TO
+            ):
+                return WatchEvent(WatchEvent.ITEM_MOVED, (move_from, target))
 
     def add_dir_watch(self, path, mask=InotifyConstants.IN_ALL_EVENTS):
         assert os.path.isdir(path)
