@@ -52,7 +52,7 @@ if (
     raise RuntimeError("Unsupported libc version found: %s" % libc._name)
 
 
-class InotifyConstants:
+class InotifyConstants(object):
     # User-space events
     IN_ACCESS = 0x00000001  # File was accessed.
     IN_MODIFY = 0x00000002  # File was modified.
@@ -106,6 +106,16 @@ class InotifyConstants:
     # Flags for ``inotify_init1``
     IN_CLOEXEC = 0x02000000
     IN_NONBLOCK = 0x00004000
+
+    @staticmethod
+    def parse(mask):
+        result = []
+        for key in dir(InotifyConstants):
+            if not key.startswith("IN_"):
+                continue
+            if mask & getattr(InotifyConstants, key):
+                result.append(key)
+        return result
 
 
 class inotify_event_struct(ctypes.Structure):
@@ -192,13 +202,18 @@ class INotifyWatcher(WatcherBackendBase):
 
             self._event_queue.put_nowait((target, mask))
             if mask & InotifyConstants.IN_CREATE and mask & InotifyConstants.IN_ISDIR:
-                for it in os.listdir(target):
-                    # Handle mkdir -p
-                    mask = InotifyConstants.IN_CREATE
-                    path = os.path.join(target, it)
-                    if os.path.isdir(path):
-                        mask |= InotifyConstants.IN_ISDIR
-                    self._event_queue.put_nowait((path, mask))
+                # Handle mkdir -p
+                def _handle_sub_dir(path):
+                    for it in os.listdir(path):
+                        mask = InotifyConstants.IN_CREATE
+                        subpath = os.path.join(path, it)
+                        if os.path.isdir(subpath):
+                            mask |= InotifyConstants.IN_ISDIR
+                        self._event_queue.put_nowait((subpath, mask))
+                        if os.path.isdir(subpath):
+                            _handle_sub_dir(subpath)
+
+                _handle_sub_dir(target)
                 self.add_dir_watch(target)
 
     @staticmethod
