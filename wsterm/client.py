@@ -180,8 +180,7 @@ class WSTerminalClient(object):
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name],
-                    path,
+                    dir_tree["dirs"][name], path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
@@ -211,6 +210,14 @@ class WSTerminalClient(object):
         utils.logger.info("[%s] Remove file %s" % (self.__class__.__name__, file_path))
         await self._conn.send_request(proto.EnumCommand.REMOVE_FILE, path=file_path)
 
+    async def move_item(self, src_path, dst_path):
+        utils.logger.info(
+            "[%s] Move item %s to %s" % (self.__class__.__name__, src_path, dst_path)
+        )
+        await self._conn.send_request(
+            proto.EnumCommand.MOVE_ITEM, src_path=src_path, dst_path=dst_path
+        )
+
     async def on_directory_created(self, path):
         await self.create_directory(path)
 
@@ -226,6 +233,9 @@ class WSTerminalClient(object):
     async def on_file_removed(self, path):
         await self.remove_file(path)
 
+    async def on_item_moved(self, src_path, dst_path):
+        await self.move_item(src_path, dst_path)
+
     async def sync_workspace(self, workspace_path):
         if not os.path.isdir(workspace_path):
             raise RuntimeError("Workspace %s not exist" % workspace_path)
@@ -234,8 +244,7 @@ class WSTerminalClient(object):
             "%s%s" % (socket.gethostname(), workspace_path)
         )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE,
-            workspace=workspace_hash,
+            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_hash,
         )
         response = await self._conn.read_response(request)
         diff_result = self._workspace.make_diff(response["data"])
@@ -264,8 +273,7 @@ class WSTerminalClient(object):
 
     async def create_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.CREATE_SHELL,
-            size=size,
+            proto.EnumCommand.CREATE_SHELL, size=size,
         )
         response = await self._conn.read_response(request)
         if response["code"]:

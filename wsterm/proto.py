@@ -20,6 +20,7 @@ class EnumCommand(object):
     REMOVE_DIR = "remove-dir"
     WRITE_FILE = "write-file"
     REMOVE_FILE = "remove-file"
+    MOVE_ITEM = "move-item"
 
     CREATE_SHELL = "create-shell"
     WRITE_STDIN = "write-stdin"

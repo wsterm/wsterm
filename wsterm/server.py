@@ -101,8 +101,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             self._workspace = workspace.Workspace(workspace_path)
             data = self._workspace.snapshot()
             await self.send_response(
-                request,
-                data=data,
+                request, data=data,
             )
         elif self._workspace and request["command"] == proto.EnumCommand.WRITE_FILE:
             utils.logger.info(
@@ -126,6 +125,12 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 "[%s] Remove directory %s" % (self.__class__.__name__, request["path"])
             )
             self._workspace.remove_directory(request["path"])
+        elif self._workspace and request["command"] == proto.EnumCommand.MOVE_ITEM:
+            utils.logger.info(
+                "[%s] Move item %s to %s"
+                % (self.__class__.__name__, request["src_path"], request["dst_path"])
+            )
+            self._workspace.move_item(request["src_path"], request["dst_path"])
         elif request["command"] == proto.EnumCommand.CREATE_SHELL:
             utils.logger.info(
                 "[%s] Create shell (%d, %d)"

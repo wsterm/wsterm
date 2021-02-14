@@ -20,6 +20,7 @@ class EnumEvent(object):
     ON_FILE_CREATED = "on_file_created"
     ON_FILE_REMOVED = "on_file_removed"
     ON_FILE_MODIFIED = "on_file_modified"
+    ON_ITEM_MOVED = "on_item_moved"
 
 
 class Directory(object):
@@ -119,6 +120,11 @@ class Workspace(object):
         if os.path.isfile(file_path):
             os.remove(file_path)
 
+    def move_item(self, src_path, dst_path):
+        src_path = os.path.join(self._root_path, src_path.replace("/", os.path.sep))
+        dst_path = os.path.join(self._root_path, dst_path.replace("/", os.path.sep))
+        os.rename(src_path, dst_path)
+
     def register_handler(self, handler):
         self._handlers.append(handler)
 
@@ -145,6 +151,9 @@ class Workspace(object):
 
     def on_file_removed(self, path):
         self.on_event(EnumEvent.ON_FILE_REMOVED, path=path)
+
+    def on_item_moved(self, src_path, dst_path):
+        self.on_event(EnumEvent.ON_ITEM_MOVED, src_path=src_path, dst_path=dst_path)
 
     def snapshot(self, root=None):
         result = {"dirs": {}, "files": {}}
