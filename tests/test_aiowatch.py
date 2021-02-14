@@ -61,12 +61,12 @@ async def test_aiowatch():
         "123/456/789/xxx.txt".replace("/", os.path.sep),
     )
     assert log_list[5] == (
-        "on_directory_removed",
-        "123/456/789".replace("/", os.path.sep),
+        "on_file_removed",
+        "123/456/789/xxx.txt".replace("/", os.path.sep),
     )
     assert log_list[6] == (
-        "on_file_removed",
-        "123/456/xxx.txt".replace("/", os.path.sep),
+        "on_directory_removed",
+        "123/456/789".replace("/", os.path.sep),
     )
     assert log_list[7] == ("on_directory_removed", "123/456".replace("/", os.path.sep))
     assert log_list[8] == ("on_directory_removed", "123")
