@@ -8,32 +8,84 @@ import tempfile
 from wsterm import aiowatch
 
 
-async def test_aiowatch():
+class WatchHandler(object):
+    def __init__(self):
+        self._log = []
+
+    def get_log_list(self):
+        return self._log
+
+    def on_directory_created(self, target):
+        self._log.append(("on_directory_created", target))
+
+    def on_directory_removed(self, target):
+        self._log.append(("on_directory_removed", target))
+
+    def on_file_created(self, target):
+        self._log.append(("on_file_created", target))
+
+    def on_file_modified(self, target):
+        self._log.append(("on_file_modified", target))
+
+    def on_file_removed(self, target):
+        self._log.append(("on_file_removed", target))
+
+
+async def test_aiowatch_simple():
     root_path = tempfile.mkdtemp()
+    handler = WatchHandler()
+    watcher = aiowatch.AIOWatcher(root_path, handler)
+    asyncio.ensure_future(watcher.start())
 
-    class MyHandler(object):
-        def __init__(self):
-            self._log = []
+    await asyncio.sleep(0.1)
+    os.mkdir(os.path.join(root_path, "123"))
+    await asyncio.sleep(0.1)
+    os.rmdir(os.path.join(root_path, "123"))
+    await asyncio.sleep(0.1)
+    with open(os.path.join(root_path, "xxx.txt"), "w") as fp:
+        fp.write("test")
+    await asyncio.sleep(0.1)
+    os.remove(os.path.join(root_path, "xxx.txt"))
+    await asyncio.sleep(0.1)
+    log_list = handler.get_log_list()
+    assert log_list[0] == ("on_directory_created", "123")
+    assert log_list[1] == ("on_directory_removed", "123")
+    assert log_list[2] == ("on_file_created", "xxx.txt")
+    assert log_list[3] == ("on_file_modified", "xxx.txt")
+    assert log_list[4] == ("on_file_removed", "xxx.txt")
 
-        def get_log_list(self):
-            return self._log
 
-        def on_directory_created(self, target):
-            self._log.append(("on_directory_created", target))
+async def test_aiowatch_rename():
+    root_path = tempfile.mkdtemp()
+    handler = WatchHandler()
+    watcher = aiowatch.AIOWatcher(root_path, handler)
+    asyncio.ensure_future(watcher.start())
 
-        def on_directory_removed(self, target):
-            self._log.append(("on_directory_removed", target))
+    await asyncio.sleep(0.1)
+    os.mkdir(os.path.join(root_path, "123"))
+    await asyncio.sleep(0.1)
+    os.rename(os.path.join(root_path, "123"), os.path.join(root_path, "456"))
+    await asyncio.sleep(0.1)
+    with open(os.path.join(root_path, "xxx.txt"), "w") as fp:
+        fp.write("test")
+    await asyncio.sleep(0.1)
+    os.rename(os.path.join(root_path, "xxx.txt"), os.path.join(root_path, "yyy.txt"))
+    await asyncio.sleep(0.1)
 
-        def on_file_created(self, target):
-            self._log.append(("on_file_created", target))
+    log_list = handler.get_log_list()
+    assert log_list[0] == ("on_directory_created", "123")
+    assert log_list[1] == ("on_directory_removed", "123")
+    assert log_list[2] == ("on_directory_created", "456")
+    assert log_list[3] == ("on_file_created", "xxx.txt")
+    assert log_list[4] == ("on_file_modified", "xxx.txt")
+    assert log_list[5] == ("on_file_removed", "xxx.txt")
+    assert log_list[6] == ("on_file_created", "yyy.txt")
+    assert log_list[7] == ("on_file_modified", "yyy.txt")
 
-        def on_file_modified(self, target):
-            self._log.append(("on_file_modified", target))
 
-        def on_file_removed(self, target):
-            self._log.append(("on_file_removed", target))
-
-    handler = MyHandler()
+async def test_aiowatch_complex():
+    root_path = tempfile.mkdtemp()
+    handler = WatchHandler()
     watcher = aiowatch.AIOWatcher(root_path, handler)
     asyncio.ensure_future(watcher.start())
 
