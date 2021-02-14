@@ -192,6 +192,13 @@ class INotifyWatcher(WatcherBackendBase):
 
             self._event_queue.put_nowait((target, mask))
             if mask & InotifyConstants.IN_CREATE and mask & InotifyConstants.IN_ISDIR:
+                for it in os.listdir(target):
+                    # Handle mkdir -p
+                    mask = InotifyConstants.IN_CREATE
+                    path = os.path.join(target, it)
+                    if os.path.isdir(path):
+                        mask |= InotifyConstants.IN_ISDIR
+                    self._event_queue.put_nowait((path, mask))
                 self.add_dir_watch(target)
 
     @staticmethod

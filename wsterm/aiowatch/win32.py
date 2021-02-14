@@ -30,6 +30,33 @@ class Win32Watcher(WatcherBackendBase):
         super(Win32Watcher, self).__init__(loop)
         self._watch_list = []
         asyncio.ensure_future(self.polling_task())
+        self._dir_tree = {}
+
+    def _get_dir_node(self, path, auto_create=False):
+        path = path.replace(":\\\\", "\\")
+        items = path.split("\\")
+        node = self._dir_tree
+        for it in items:
+            if it not in node:
+                if auto_create:
+                    node[it] = {}
+                else:
+                    return None
+            node = node[it]
+        return node
+
+    def _snapshot(self, path):
+        assert os.path.isdir(path)
+        node = self._get_dir_node(path, True)
+        items = os.listdir(path)
+        for it in items:
+            if it not in node:
+                subpath = os.path.join(path, it)
+                if os.path.isdir(subpath):
+                    node[it] = {}
+                    self._snapshot(subpath)
+                elif os.path.isfile(subpath):
+                    node[it] = None
 
     def _create_watch_handle(self, path):
         return win32file.CreateFile(
@@ -57,11 +84,16 @@ class Win32Watcher(WatcherBackendBase):
 
     def _add_dir_watch(self, handle, buffer, ov):
         win32file.ReadDirectoryChangesW(
-            handle, buffer, True, win32con.FILE_NOTIFY_CHANGE_DIR_NAME, ov,
+            handle,
+            buffer,
+            True,
+            win32con.FILE_NOTIFY_CHANGE_DIR_NAME,
+            ov,
         )
 
     def add_dir_watch(self, path):
         # Add directory watch
+        self._snapshot(path)
         handle_dir = self._create_watch_handle(path)
         ov_dir = pywintypes.OVERLAPPED()
         ov_dir.hEvent = win32event.CreateEvent(None, 0, 0, None)
@@ -95,10 +127,102 @@ class Win32Watcher(WatcherBackendBase):
                 else:
                     for action, name in win32file.FILE_NOTIFY_INFORMATION(
                         item[-1], length
-                    ):  #
+                    ):
                         target = os.path.join(item[1], name)
-                        self._event_queue.put_nowait((target, item[0], action))
+                        if action == FILE_ACTION_MODIFIED and not os.path.isfile(
+                            target
+                        ):
+                            # Ignore directory modify event
+                            continue
+                        elif action == FILE_ACTION_MODIFIED and os.path.isfile(target):
+                            dir_node = self._get_dir_node(item[1])
+                            if name not in dir_node:
+                                # Auto insert file create event
+                                self._event_queue.put_nowait(
+                                    (target, item[0], FILE_ACTION_ADDED)
+                                )
+                                dir_node[name] = None
+                        elif action == FILE_ACTION_REMOVED:
+                            path = target
+                            remove_root = target
+                            while not os.path.exists(path):
+                                # Get remove root
+                                remove_root = path
+                                path = os.path.dirname(path)
 
+                            if self._get_dir_node(remove_root):
+                                # Insert remove sub dirs/files event
+                                def _handle_sub_dir(path):
+                                    dir_node = self._get_dir_node(path)
+                                    for it in dir_node:
+                                        if isinstance(dir_node[it], dict):
+                                            if dir_node[it]:
+                                                _handle_sub_dir(os.path.join(path, it))
+                                            self._event_queue.put_nowait(
+                                                (
+                                                    os.path.join(path, it),
+                                                    EnumWatchType.WATCH_DIRECTORY,
+                                                    action,
+                                                )
+                                            )
+                                        else:
+                                            self._event_queue.put_nowait(
+                                                (
+                                                    os.path.join(path, it),
+                                                    EnumWatchType.WATCH_FILE,
+                                                    action,
+                                                )
+                                            )
+
+                                _handle_sub_dir(remove_root)
+                                self._event_queue.put_nowait(
+                                    (
+                                        remove_root,
+                                        EnumWatchType.WATCH_DIRECTORY,
+                                        action,
+                                    )
+                                )
+                                parent_dir_node = self._get_dir_node(
+                                    os.path.dirname(remove_root)
+                                )
+                                parent_dir_node.pop(os.path.split(remove_root)[-1])
+                                continue
+
+                        self._event_queue.put_nowait((target, item[0], action))
+                        if action == FILE_ACTION_ADDED and os.path.isdir(target):
+                            # Handle mkdir -p
+                            def _handle_sub_dir(path):
+                                dir_node = self._get_dir_node(path, True)
+                                for it in os.listdir(path):
+                                    if it in dir_node:
+                                        continue
+                                    subpath = os.path.join(path, it)
+                                    if os.path.isdir(subpath):
+                                        watch_type = EnumWatchType.WATCH_DIRECTORY
+                                        dir_node[it] = {}
+                                    else:
+                                        watch_type = EnumWatchType.WATCH_FILE
+                                        dir_node[it] = None
+
+                                    self._event_queue.put_nowait(
+                                        (subpath, watch_type, action)
+                                    )
+
+                                    if os.path.isdir(subpath):
+                                        _handle_sub_dir(subpath)
+
+                            dir_node = self._get_dir_node(item[1])
+                            dir_node[name] = {}
+                            _handle_sub_dir(target)
+                        elif action == FILE_ACTION_ADDED and os.path.isfile(target):
+                            # Auto fire modify event
+                            self._event_queue.put_nowait(
+                                (target, item[0], FILE_ACTION_MODIFIED)
+                            )
+                            dir_node = self._get_dir_node(os.path.dirname(target))
+                            dir_node[os.path.split(target)[-1]] = None
+
+                    # Continue to listen
                     self._add_dir_watch(item[2], item[4], item[3])
                     self._add_file_watch(item[2], item[4], item[3])
 
