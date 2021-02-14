@@ -97,7 +97,10 @@ def main():
         utils.logger.setLevel(logging.ERROR)
 
     utils.logger.propagate = 0
-    utils.logger.addHandler(handler)
+    if args.server:
+        utils.logger.addHandler(handler)
+    else:
+        log_file = log_file or "wsterm.log"
 
     if log_file:
         handler = logging.handlers.RotatingFileHandler(
