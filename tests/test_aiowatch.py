@@ -3,6 +3,7 @@
 import asyncio
 import os
 import shutil
+import sys
 import tempfile
 
 from wsterm import aiowatch
@@ -29,6 +30,9 @@ class WatchHandler(object):
 
     def on_file_removed(self, target):
         self._log.append(("on_file_removed", target))
+
+    def on_item_moved(self, src_path, dst_path):
+        self._log.append(("on_item_moved", src_path, dst_path))
 
 
 async def test_aiowatch_simple():
@@ -74,13 +78,19 @@ async def test_aiowatch_rename():
 
     log_list = handler.get_log_list()
     assert log_list[0] == ("on_directory_created", "123")
-    assert log_list[1] == ("on_directory_removed", "123")
-    assert log_list[2] == ("on_directory_created", "456")
-    assert log_list[3] == ("on_file_created", "xxx.txt")
-    assert log_list[4] == ("on_file_modified", "xxx.txt")
-    assert log_list[5] == ("on_file_removed", "xxx.txt")
-    assert log_list[6] == ("on_file_created", "yyy.txt")
-    assert log_list[7] == ("on_file_modified", "yyy.txt")
+    if sys.platform in ("linux", "win32"):
+        assert log_list[1] == ("on_item_moved", "123", "456")
+        assert log_list[2] == ("on_file_created", "xxx.txt")
+        assert log_list[3] == ("on_file_modified", "xxx.txt")
+        assert log_list[4] == ("on_item_moved", "xxx.txt", "yyy.txt")
+    else:
+        assert log_list[1] == ("on_directory_removed", "123")
+        assert log_list[2] == ("on_directory_created", "456")
+        assert log_list[3] == ("on_file_created", "xxx.txt")
+        assert log_list[4] == ("on_file_modified", "xxx.txt")
+        assert log_list[5] == ("on_file_removed", "xxx.txt")
+        assert log_list[6] == ("on_file_created", "yyy.txt")
+        assert log_list[7] == ("on_file_modified", "yyy.txt")
 
 
 async def test_aiowatch_complex():
