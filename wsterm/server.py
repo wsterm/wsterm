@@ -95,7 +95,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         if request["command"] == proto.EnumCommand.SYNC_WORKSPACE:
             worksapce_id = request["workspace"]
             workspace_path = os.path.join(
-                os.environ.get("WORKSPACE", os.environ.get("TEMP", "/tmp")),
+                os.environ.get("WSTERM_WORKSPACE", os.environ.get("TEMP", "/tmp")),
                 worksapce_id,
             )
             self._workspace = workspace.Workspace(workspace_path)
