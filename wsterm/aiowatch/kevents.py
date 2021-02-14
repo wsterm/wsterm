@@ -18,20 +18,23 @@ class KEventsWatcher(WatcherBackendBase):
         self._dir_tree = {}
         asyncio.ensure_future(self.polling_task())
 
-    def _get_dir_node(self, path):
+    def _get_dir_node(self, path, auto_create=False):
         if path[0] == "/":
             path = path[1:]
         items = path.split("/")
         node = self._dir_tree
         for it in items:
             if it not in node:
-                node[it] = {}
+                if auto_create:
+                    node[it] = {}
+                else:
+                    return None
             node = node[it]
         return node
 
     def _get_dir_new_item(self, path):
         result = []
-        node = self._get_dir_node(path)
+        node = self._get_dir_node(path, True)
         items = os.listdir(path)
         for it in items:
             if it not in node:
@@ -49,7 +52,7 @@ class KEventsWatcher(WatcherBackendBase):
     def add_dir_watch(self, path):
         assert os.path.isdir(path)
         self.add_watch(path)
-        node = self._get_dir_node(path)
+        node = self._get_dir_node(path, True)
         for it in os.listdir(path):
             subpath = os.path.join(path, it)
             if os.path.isdir(subpath):
@@ -89,7 +92,6 @@ class KEventsWatcher(WatcherBackendBase):
                 return
 
     async def polling_task(self):
-        delayed_events = []
         while True:
             events = [event for _, event, _ in self._watch_list.values()]
             events = list(self._kq.control(events, 4096, 0))
@@ -100,24 +102,53 @@ class KEventsWatcher(WatcherBackendBase):
                 key=lambda event: len(self._watch_list[event.ident][0].split("/")),
                 reverse=True,
             )  # Ensure remove inner items first when remove directory
-            events.extend(delayed_events)
-            delayed_events = []
+
             for event in events:
                 target, _, _ = self._watch_list[event.ident]
                 if not os.path.exists(target):
                     # Item removed
-                    node = self._get_dir_node(target)
-                    if isinstance(node, dict):
-                        if node:
-                            # Directory not empty
-                            delayed_events.append(event)
-                            continue
-                        event = WatchEvent(WatchEvent.DIRECTORY_REMOVED, target)
+                    path = target
+                    remove_root = target
+                    while not os.path.exists(path):
+                        # Get remove root
+                        remove_root = path
+                        path = os.path.dirname(path)
+
+                    if self._get_dir_node(remove_root) is not None:
+                        # Insert remove sub dirs/files event
+                        def _handle_sub_dir(path):
+                            dir_node = self._get_dir_node(path)
+                            for it in dir_node:
+                                if isinstance(dir_node[it], dict):
+                                    if dir_node[it]:
+                                        _handle_sub_dir(os.path.join(path, it))
+                                    self._event_queue.put_nowait(
+                                        WatchEvent(
+                                            WatchEvent.DIRECTORY_REMOVED,
+                                            os.path.join(path, it),
+                                        )
+                                    )
+                                else:
+                                    self._event_queue.put_nowait(
+                                        WatchEvent(
+                                            WatchEvent.FILE_REMOVED,
+                                            os.path.join(path, it),
+                                        )
+                                    )
+
+                        _handle_sub_dir(remove_root)
+                        self._event_queue.put_nowait(
+                            WatchEvent(WatchEvent.DIRECTORY_REMOVED, remove_root)
+                        )
                     else:
-                        event = WatchEvent(WatchEvent.FILE_REMOVED, target)
+                        self._event_queue.put_nowait(
+                            WatchEvent(WatchEvent.FILE_REMOVED, remove_root)
+                        )
+
                     parent = self._get_dir_node(os.path.dirname(target))
                     parent.pop(os.path.split(target)[-1])
                     self.remove_watch(target)
+                    continue
                 elif os.path.isdir(target):
                     new_events = self._get_dir_new_item(target)
                     for event in new_events:
