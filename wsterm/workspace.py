@@ -129,7 +129,7 @@ class Workspace(object):
         self._handlers.append(handler)
 
     def on_event(self, event_name, **kwargs):
-        path = kwargs.get("path")
+        path = kwargs.get("path", kwargs.get("src_path"))
         if path and ".git" in path.split(os.path.sep):
             return
         for handler in self._handlers:

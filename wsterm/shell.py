@@ -70,6 +70,9 @@ class Shell(object):
                         exe = path
                         break
 
+            utils.logger.info(
+                "[%s] Create shell %s" % (self.__class__.__name__, cmdline)
+            )
             pid, self._fd = pty.fork()
             if pid == 0:
                 # child process

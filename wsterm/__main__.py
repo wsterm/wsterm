@@ -20,7 +20,7 @@ async def connect_server(url, workspace, token=None):
     cli = client.WSTerminalClient(url, token=token)
     if not await cli.connect():
         print(
-            "Connect websocket server failed, pls check token is valid", file=sys.stderr
+            "Connect websocket server failed", file=sys.stderr
         )
         return False
 
