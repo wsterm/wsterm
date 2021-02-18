@@ -5,6 +5,7 @@
 
 import asyncio
 import os
+import shutil
 import socket
 import sys
 import time
@@ -96,7 +97,7 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
         if request["command"] == proto.EnumCommand.WRITE_STDOUT:
             sys.stdout.buffer.write(request["buffer"])
             sys.stdout.flush()
-        elif request["command"] == proto.EnumCommand.SHELL_EXIT:
+        elif request["command"] == proto.EnumCommand.EXIT_SHELL:
             if self._handler:
                 self._handler.on_shell_exit()
         else:
@@ -180,7 +181,8 @@ class WSTerminalClient(object):
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name], path,
+                    dir_tree["dirs"][name],
+                    path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
@@ -244,7 +246,8 @@ class WSTerminalClient(object):
             "%s%s" % (socket.gethostname(), workspace_path)
         )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_hash,
+            proto.EnumCommand.SYNC_WORKSPACE,
+            workspace=workspace_hash,
         )
         response = await self._conn.read_response(request)
         diff_result = self._workspace.make_diff(response["data"])
@@ -271,14 +274,35 @@ class WSTerminalClient(object):
 
         asyncio.ensure_future(exit_loop())
 
+    async def adjust_window_size(self, size):
+        if not hasattr(self, "_last_check_time"):
+            self._last_check_time = 0
+        now = time.time()
+        if now - self._last_check_time < 0.5:
+            return size
+        current_size = shutil.get_terminal_size(size)
+        if current_size != size:
+            await self.resize_shell(current_size)
+        self._last_check_time = now
+        return current_size
+
+    async def resize_shell(self, size):
+        request = await self._conn.send_request(
+            proto.EnumCommand.RESIZE_SHELL,
+            size=size,
+        )
+        await self._conn.read_response(request)
+
     async def create_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.CREATE_SHELL, size=size,
+            proto.EnumCommand.CREATE_SHELL,
+            size=size,
         )
         response = await self._conn.read_response(request)
         if response["code"]:
             raise RuntimeError("Create shell failed: %s" % response["message"])
         server_platform = response["platform"]
+
         if sys.platform != "win32":
             with utils.UnixStdIn() as shell_stdin:
 
@@ -295,6 +319,7 @@ class WSTerminalClient(object):
                 self._loop.add_reader(shell_stdin, on_input)
 
                 while self._running:
+                    size = await self.adjust_window_size(size)
                     await asyncio.sleep(0.005)
                 self._loop.remove_reader(shell_stdin)
         else:
@@ -323,4 +348,5 @@ class WSTerminalClient(object):
                         char = b"\x03"
                     asyncio.ensure_future(self.write_shell_stdin(char))
                 else:
-                    await asyncio.sleep(0.005)
+                    size = await self.adjust_window_size(size)
+                    await asyncio.sleep(0.02)

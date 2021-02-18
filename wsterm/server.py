@@ -101,7 +101,8 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             self._workspace = workspace.Workspace(workspace_path)
             data = self._workspace.snapshot()
             await self.send_response(
-                request, data=data,
+                request,
+                data=data,
             )
         elif self._workspace and request["command"] == proto.EnumCommand.WRITE_FILE:
             utils.logger.info(
@@ -154,6 +155,16 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                     "[%s] Input %s" % (self.__class__.__name__, request["buffer"])
                 )
                 self._shell.write(request["buffer"])
+        elif request["command"] == proto.EnumCommand.RESIZE_SHELL:
+            if not self._shell:
+                await self.send_response(request, code=-1, message="Shell not create")
+            else:
+                utils.logger.info(
+                    "[%s] Resize shell to %d,%d"
+                    % (self.__class__.__name__, request["size"][0], request["size"][1])
+                )
+                self._shell.resize(request["size"])
+                await self.send_response(request)
 
     async def write_shell_stdout(self, buffer):
         utils.logger.debug("[%s] Output %s" % (self.__class__.__name__, buffer))
@@ -190,7 +201,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
 
                 await self.write_shell_stdout(buffer)
         utils.logger.warn("[%s] Shell process exit" % self.__class__.__name__)
-        await self.send_request(proto.EnumCommand.SHELL_EXIT)
+        await self.send_request(proto.EnumCommand.EXIT_SHELL)
         self._shell = None
 
     def on_connection_close(self):

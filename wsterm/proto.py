@@ -26,7 +26,8 @@ class EnumCommand(object):
     WRITE_STDIN = "write-stdin"
     WRITE_STDOUT = "write-stdout"
     WRITE_STDERR = "write-stderr"
-    SHELL_EXIT = "shell-exit"
+    RESIZE_SHELL = "resize-shell"
+    EXIT_SHELL = "exit-shell"
 
 
 class TransportPacket(object):
