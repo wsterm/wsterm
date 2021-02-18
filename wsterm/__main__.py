@@ -17,11 +17,10 @@ from . import client, server, utils
 
 
 async def connect_server(url, workspace, token=None):
+    print("Connecting to remote terminal %s" % url)
     cli = client.WSTerminalClient(url, token=token)
     if not await cli.connect():
-        print(
-            "Connect websocket server failed", file=sys.stderr
-        )
+        print("Connect websocket server failed", file=sys.stderr)
         return False
 
     if workspace:
@@ -139,7 +138,8 @@ def main():
                 )
             )
         print(message, file=sys.stderr)
-        loop.stop()
+        if not args.server:
+            loop.stop()
 
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(handle_exception)
