@@ -1,5 +1,5 @@
 msgpack
 python-daemon
-tornado
+tornado==6.0.4
 gitignore_parser
 pywin32; sys_platform == 'win32'
