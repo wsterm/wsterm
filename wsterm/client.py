@@ -162,13 +162,17 @@ class WSTerminalClient(object):
         utils.logger.info(
             "[%s] Create directory %s" % (self.__class__.__name__, dir_path)
         )
-        await self._conn.send_request(proto.EnumCommand.CREATE_DIR, path=dir_path)
+        await self._conn.send_request(
+            proto.EnumCommand.CREATE_DIR, path=dir_path.replace(os.path.sep, "/")
+        )
 
     async def remove_directory(self, dir_path):
         utils.logger.info(
             "[%s] Remove directory %s" % (self.__class__.__name__, dir_path)
         )
-        await self._conn.send_request(proto.EnumCommand.REMOVE_DIR, path=dir_path)
+        await self._conn.send_request(
+            proto.EnumCommand.REMOVE_DIR, path=dir_path.replace(os.path.sep, "/")
+        )
 
     async def update_workspace(self, dir_tree, root):
         assert "dirs" in dir_tree or "files" in dir_tree
@@ -202,7 +206,7 @@ class WSTerminalClient(object):
                     break
                 await self._conn.send_request(
                     proto.EnumCommand.WRITE_FILE,
-                    path=file_path,
+                    path=file_path.replace(os.path.sep, "/"),
                     data=data,
                     overwrite=offset == 0,
                 )
@@ -210,14 +214,18 @@ class WSTerminalClient(object):
 
     async def remove_file(self, file_path):
         utils.logger.info("[%s] Remove file %s" % (self.__class__.__name__, file_path))
-        await self._conn.send_request(proto.EnumCommand.REMOVE_FILE, path=file_path)
+        await self._conn.send_request(
+            proto.EnumCommand.REMOVE_FILE, path=file_path.replace(os.path.sep, "/")
+        )
 
     async def move_item(self, src_path, dst_path):
         utils.logger.info(
             "[%s] Move item %s to %s" % (self.__class__.__name__, src_path, dst_path)
         )
         await self._conn.send_request(
-            proto.EnumCommand.MOVE_ITEM, src_path=src_path, dst_path=dst_path
+            proto.EnumCommand.MOVE_ITEM,
+            src_path=src_path.replace(os.path.sep, "/"),
+            dst_path=dst_path.replace(os.path.sep, "/"),
         )
 
     async def on_directory_created(self, path):
