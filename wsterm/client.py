@@ -185,8 +185,7 @@ class WSTerminalClient(object):
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name],
-                    path,
+                    dir_tree["dirs"][name], path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
@@ -253,9 +252,13 @@ class WSTerminalClient(object):
         workspace_hash = utils.make_short_hash(
             "%s%s" % (socket.gethostname(), workspace_path)
         )
+        workspace_name = "%s-%s@%s" % (
+            os.path.split(workspace_path)[-1],
+            workspace_hash,
+            socket.gethostname(),
+        )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE,
-            workspace=workspace_hash,
+            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_name,
         )
         response = await self._conn.read_response(request)
         diff_result = self._workspace.make_diff(response["data"])
@@ -296,15 +299,13 @@ class WSTerminalClient(object):
 
     async def resize_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.RESIZE_SHELL,
-            size=size,
+            proto.EnumCommand.RESIZE_SHELL, size=size,
         )
         await self._conn.read_response(request)
 
     async def create_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.CREATE_SHELL,
-            size=size,
+            proto.EnumCommand.CREATE_SHELL, size=size,
         )
         response = await self._conn.read_response(request)
         if response["code"]:
