@@ -104,3 +104,7 @@ class Shell(object):
             fcntl.ioctl(self._fd, termios.TIOCSWINSZ, winsize)
         self._size = size
         return True
+
+    def exit(self):
+        self._stdin.write(b"exit\n")
+        utils.logger.info("[%s] Shell exit" % self.__class__.__name__)

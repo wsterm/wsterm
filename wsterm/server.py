@@ -180,7 +180,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         tasks = [None]
         if self._shell.stderr:
             tasks.append(None)
-        while proc.returncode is None:
+        while self._shell and proc.returncode is None:
             if tasks[0] is None:
                 tasks[0] = utils.safe_ensure_future(self._shell.stdout.read(4096))
             if self._shell.stderr and tasks[1] is None:
@@ -199,13 +199,18 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                     await asyncio.sleep(0.01)
                     break
 
-                await self.write_shell_stdout(buffer)
+                if self._shell:
+                    await self.write_shell_stdout(buffer)
         utils.logger.warn("[%s] Shell process exit" % self.__class__.__name__)
-        await self.send_request(proto.EnumCommand.EXIT_SHELL)
-        self._shell = None
+        if self._shell:
+            await self.send_request(proto.EnumCommand.EXIT_SHELL)
+            self._shell = None
 
     def on_connection_close(self):
-        pass
+        utils.logger.warn("[%s] Connection closed" % self.__class__.__name__)
+        if self._shell:
+            self._shell.exit()
+            self._shell = None
 
 
 def start_server(listen_address, path, token=None):
