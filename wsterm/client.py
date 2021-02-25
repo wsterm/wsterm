@@ -140,22 +140,40 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
 class WSTerminalClient(object):
     """Websocket Teminal Client"""
 
+    session_timeout = 10 * 60
     file_fragment_size = 4 * 1024 * 1024
 
-    def __init__(self, url, token=None, timeout=15, loop=None):
-        headers = {}
+    def __init__(self, url, token=None, timeout=15, loop=None, auto_reconnect=False):
+        self._url = url
+        self._headers = {}
         if token:
-            headers["Authorization"] = "Token %s" % token
-        self._conn = WSTerminalConnection(url, headers, timeout, handler=self)
+            self._headers["Authorization"] = "Token %s" % token
+        self._timeout = timeout
+        self._conn = WSTerminalConnection(
+            self._url, self._headers, timeout, handler=self
+        )
         self._loop = loop or asyncio.get_event_loop()
+        self._auto_reconnect = auto_reconnect
+        self._session_id = None
         self._workspace = None
-        self._running = True
+        self._running = False
+
+    @property
+    def auto_reconnect(self):
+        return self._auto_reconnect
 
     def on_connection_close(self):
         utils.logger.warn("[%s] Websocket connection closed" % self.__class__.__name__)
-        self.on_shell_exit()
+        self._running = False
+        if not self._auto_reconnect:
+            self.on_shell_exit()
+        else:
+            self._conn = WSTerminalConnection(
+                self._url, self._headers, self._timeout, handler=self
+            )
 
     async def connect(self):
+        self._running = True
         return await self._conn.wait_for_connecting()
 
     async def create_directory(self, dir_path):
@@ -278,9 +296,10 @@ class WSTerminalClient(object):
 
     def on_shell_exit(self):
         self._running = False
+        self._auto_reconnect = False
 
         async def exit_loop():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.1)
             self._loop.stop()
 
         asyncio.ensure_future(exit_loop())
@@ -304,14 +323,20 @@ class WSTerminalClient(object):
         await self._conn.read_response(request)
 
     async def create_shell(self, size):
+        params = {}
+        if self._auto_reconnect:
+            params["timeout"] = self.session_timeout
+        if self._session_id:
+            params["session"] = self._session_id
         request = await self._conn.send_request(
-            proto.EnumCommand.CREATE_SHELL, size=size,
+            proto.EnumCommand.CREATE_SHELL, size=size, **params
         )
         response = await self._conn.read_response(request)
         if response["code"]:
             raise RuntimeError("Create shell failed: %s" % response["message"])
         server_platform = response["platform"]
-
+        if not self._session_id and self._auto_reconnect:
+            self._session_id = response["session"]
         if sys.platform != "win32":
             with utils.UnixStdIn() as shell_stdin:
 
