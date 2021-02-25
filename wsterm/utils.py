@@ -119,6 +119,19 @@ class UnixStdIn(object):
         return os.read(self._fd, n)
 
 
+class Singleton(object):
+    """Singleton Decorator"""
+
+    def __init__(self, cls):
+        self.__instance = None
+        self.__cls = cls
+
+    def __call__(self, *args, **kwargs):
+        if not self.__instance:
+            self.__instance = self.__cls(*args, **kwargs)
+        return self.__instance
+
+
 def safe_ensure_future(coro, loop=None):
     loop = loop or asyncio.get_event_loop()
     fut = loop.create_future()

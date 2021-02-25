@@ -11,14 +11,19 @@ from . import utils
 
 
 class Shell(object):
-    def __init__(self, workspace, size=None):
+    def __init__(self, workspace, size, proc, stdin, stdout, stderr, fd):
         self._workspace = workspace
-        self._size = size or (80, 23)
-        self._proc = None
-        self._fd = None
-        self._stdin = None
-        self._stdout = None
-        self._stderr = None
+        self._size = None
+        self._proc = proc
+        self._fd = fd
+        self._stdin = stdin
+        self._stdout = stdout
+        self._stderr = stderr
+        self.resize(size)
+
+    @property
+    def process(self):
+        return self._proc
 
     @property
     def stdin(self):
@@ -32,16 +37,18 @@ class Shell(object):
     def stderr(self):
         return self._stderr
 
-    async def create(self):
+    @classmethod
+    async def create(cls, workspace, size=None):
+        size = size or (80, 23)
         if sys.platform == "win32":
             if hasattr(ctypes.windll.kernel32, "CreatePseudoConsole"):
                 cmd = (
                     "conhost.exe",
                     "--headless",
                     "--width",
-                    str(self._size[0]),
+                    str(size[0]),
                     "--height",
-                    str(self._size[1]),
+                    str(size[1]),
                     "--",
                     "cmd.exe",
                 )
@@ -49,15 +56,15 @@ class Shell(object):
                 cmd = ("cmd.exe",)
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
-                cwd=self._workspace,
+                cwd=workspace,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 close_fds=False
             )
-            self._stdin = proc.stdin
-            self._stdout = proc.stdout
-            self._stderr = proc.stderr
+            stdin = proc.stdin
+            stdout = proc.stdout
+            stderr = proc.stderr
         else:
             import pty
 
@@ -70,25 +77,22 @@ class Shell(object):
                         exe = path
                         break
 
-            utils.logger.info(
-                "[%s] Create shell %s" % (self.__class__.__name__, cmdline)
-            )
-            pid, self._fd = pty.fork()
+            utils.logger.info("[%s] Create shell %s" % (cls.__name__, cmdline))
+            pid, fd = pty.fork()
             if pid == 0:
                 # child process
                 sys.stdout.flush()
-                os.chdir(self._workspace)
+                os.chdir(workspace)
                 try:
                     os.execve(exe, cmdline, os.environ)
                 except Exception as e:
                     sys.stderr.write(str(e))
             else:
                 proc = utils.Process(pid)
-                self._stdin = utils.AsyncFileDescriptor(self._fd)
-                self._stdout = utils.AsyncFileDescriptor(self._fd)
-                self.resize(self._size)
+                stdin = utils.AsyncFileDescriptor(fd)
+                stderr = stdout = utils.AsyncFileDescriptor(fd)
 
-        return proc, self._stdin, self._stdout, self._stderr
+        return cls(workspace, size, proc, stdin, stdout, stderr, fd)
 
     def write(self, buffer):
         self._stdin.write(buffer)

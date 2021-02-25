@@ -3,11 +3,47 @@
 import asyncio
 import os
 import sys
+import time
+import uuid
 
 import tornado.web
 import tornado.websocket
 
 from . import proto, shell, utils, workspace
+
+
+@utils.Singleton
+class ShellSessionManager(object):
+    def __init__(self):
+        self._sessions = {}
+        asyncio.ensure_future(self.check_session_task())
+
+    async def check_session_task(self):
+        while True:
+            for session in self._sessions:
+                timeout, shell, timestamp = self._sessions[session]
+                if timestamp and time.time() >= timestamp + timeout:
+                    # Clean session
+                    shell.exit()
+                    self._sessions.pop(session)
+                    break
+            await asyncio.sleep(1)
+
+    def create_session(self, shell, timeout):
+        session_id = str(uuid.uuid4())
+        self._sessions[session_id] = [timeout, shell, 0]
+        return session_id
+
+    def get_session(self, session_id):
+        session = self._sessions.get(session_id)
+        if session:
+            return session[1]
+        return None
+
+    def update_session_time(self, session_id, timestamp):
+        session = self._sessions.get(session_id)
+        assert session != None
+        session[2] = timestamp
 
 
 class WebSocketProtocol(tornado.websocket.WebSocketProtocol13):
@@ -30,6 +66,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         self._buffer = b""
         self._workspace = None
         self._shell = None
+        self._session_id = None
         self._sequence = 0x10000
 
     def check_permission(self):
@@ -101,8 +138,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             self._workspace = workspace.Workspace(workspace_path)
             data = self._workspace.snapshot()
             await self.send_response(
-                request,
-                data=data,
+                request, data=data,
             )
         elif self._workspace and request["command"] == proto.EnumCommand.WRITE_FILE:
             utils.logger.info(
@@ -133,20 +169,61 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             )
             self._workspace.move_item(request["src_path"], request["dst_path"])
         elif request["command"] == proto.EnumCommand.CREATE_SHELL:
+            session_id = request.get("session")
+            session_timeout = request.get("timeout")
             utils.logger.info(
                 "[%s] Create shell (%d, %d)"
                 % (self.__class__.__name__, *request["size"])
             )
+            print(session_id, session_timeout)
+            ssm = ShellSessionManager()
             if self._shell:
                 await self.send_response(request, code=-1, message="Shell is created")
             else:
-                await self.send_response(request, platform=sys.platform)
-                shell_workspace = os.getcwd()
-                if self._workspace:
-                    shell_workspace = self._workspace.path
-                asyncio.ensure_future(
-                    self.spawn_shell(shell_workspace, request["size"])
-                )
+                if session_id:
+                    shell = ssm.get_session(session_id)
+                    if not shell:
+                        await self.send_response(
+                            request,
+                            code=-1,
+                            message="Shell session %s not found" % session_id,
+                        )
+                        return
+                    utils.logger.info(
+                        "[%s] Use Cached shell session %s"
+                        % (self.__class__.__name__, session_id)
+                    )
+                    self._session_id = session_id
+                    self._shell = shell
+                    ssm.update_session_time(session_id, 0)  # Avoid cleaned
+                    asyncio.ensure_future(self.forward_shell())
+                    await self.send_response(request, platform=sys.platform)
+                else:
+                    shell_workspace = os.getcwd()
+                    if self._workspace:
+                        shell_workspace = self._workspace.path
+                    asyncio.ensure_future(
+                        self.spawn_shell(shell_workspace, request["size"])
+                    )
+                    time0 = time.time()
+                    while time.time() - time0 < 5:
+                        if self._shell:
+                            break
+                        await asyncio.sleep(0.005)
+                    else:
+                        await self.send_response(
+                            request, code=-1, message="Spawn shell timeout"
+                        )
+                        return
+                    if session_timeout:
+                        self._session_id = ssm.create_session(
+                            self._shell, session_timeout
+                        )
+                        await self.send_response(
+                            request, platform=sys.platform, session=self._session_id
+                        )
+                    else:
+                        await self.send_response(request, platform=sys.platform)
         elif request["command"] == proto.EnumCommand.WRITE_STDIN:
             if not self._shell:
                 await self.send_response(request, code=-1, message="Shell not create")
@@ -175,12 +252,14 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             "[%s] Spawn new shell (%d, %d)"
             % (self.__class__.__name__, size[0], size[1])
         )
-        self._shell = shell.Shell(workspace, size)
-        proc, _, _, _ = await self._shell.create()
+        self._shell = await shell.Shell.create(workspace, size)
+        await self.forward_shell()
+
+    async def forward_shell(self):
         tasks = [None]
         if self._shell.stderr:
             tasks.append(None)
-        while self._shell and proc.returncode is None:
+        while self._shell and self._shell.process.returncode is None:
             if tasks[0] is None:
                 tasks[0] = utils.safe_ensure_future(self._shell.stdout.read(4096))
             if self._shell.stderr and tasks[1] is None:
@@ -209,15 +288,25 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
     def on_connection_close(self):
         utils.logger.warn("[%s] Connection closed" % self.__class__.__name__)
         if self._shell:
-            self._shell.exit()
+            if not self._session_id:
+                # Do not keep session
+                self._shell.exit()
+            else:
+                # Wait foe client reconnect
+                ShellSessionManager().update_session_time(self._session_id, time.time())
             self._shell = None
+
+
+class MainHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.write(
+            "<h1>Hello WSTerm</h1><script>location.href='https://github.com/wsterm/wsterm/';</script>"
+        )
 
 
 def start_server(listen_address, path, token=None):
     utils.logger.info("Websocket server listening at %s:%d" % listen_address)
     WSTerminalServerHandler.token = token
-    handlers = [
-        (path, WSTerminalServerHandler),
-    ]
+    handlers = [(path, WSTerminalServerHandler), ("/", MainHandler)]
     app = tornado.web.Application(handlers)
     app.listen(listen_address[1], listen_address[0])
