@@ -16,19 +16,23 @@ import tornado.ioloop
 from . import client, server, utils
 
 
-async def connect_server(url, workspace, token=None):
+async def connect_server(url, workspace, token=None, auto_reconnect=False):
     print("Connecting to remote terminal %s" % url)
-    cli = client.WSTerminalClient(url, token=token)
-    if not await cli.connect():
-        print("Connect websocket server failed", file=sys.stderr)
-        return False
+    cli = client.WSTerminalClient(url, token=token, auto_reconnect=auto_reconnect)
+    while True:
+        if not await cli.connect():
+            print("Connect websocket server failed", file=sys.stderr)
+            return False
 
-    if workspace:
-        print("Sync workspace to remote host...")
-        await cli.sync_workspace(workspace)
-        print("Sync workspace complete")
-    terminal_size = shutil.get_terminal_size((120, 30))
-    await cli.create_shell((terminal_size.columns, terminal_size.lines))
+        if workspace:
+            print("Sync workspace to remote host...")
+            await cli.sync_workspace(workspace)
+            print("Sync workspace complete")
+        terminal_size = shutil.get_terminal_size((120, 30))
+        await cli.create_shell((terminal_size.columns, terminal_size.lines))
+        if not cli.auto_reconnect:
+            break
+        print("Try to reconnect websocket server")
     return True
 
 
@@ -51,6 +55,12 @@ def main():
     parser.add_argument("--log-file", help="Path to save log")
     parser.add_argument(
         "-d", "--daemon", help="Run as daemon", action="store_true", default=False
+    )
+    parser.add_argument(
+        "--auto-reconnect",
+        help="Auto reconnect server when connection closed",
+        action="store_true",
+        default=False,
     )
 
     args = sys.argv[1:]
@@ -123,7 +133,7 @@ def main():
             utils.enable_native_ansi()
 
         if not asyncio.get_event_loop().run_until_complete(
-            connect_server(args.url, args.workspace, args.token)
+            connect_server(args.url, args.workspace, args.token, args.auto_reconnect)
         ):
             return -1
 
