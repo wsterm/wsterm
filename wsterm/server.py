@@ -297,11 +297,16 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             self._shell = None
 
 
+class MainHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.write(
+            "<h1>Hello WSTerm</h1><script>location.href='https://github.com/wsterm/wsterm/';</script>"
+        )
+
+
 def start_server(listen_address, path, token=None):
     utils.logger.info("Websocket server listening at %s:%d" % listen_address)
     WSTerminalServerHandler.token = token
-    handlers = [
-        (path, WSTerminalServerHandler),
-    ]
+    handlers = [(path, WSTerminalServerHandler), ("/", MainHandler)]
     app = tornado.web.Application(handlers)
     app.listen(listen_address[1], listen_address[0])
