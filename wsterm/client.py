@@ -145,7 +145,7 @@ class WSTerminalClient(object):
 
     def __init__(self, url, token=None, timeout=15, loop=None, auto_reconnect=False):
         self._url = url
-        self._headers = {}
+        self._headers = {"Proxy-Connection": "Keep-Alive"}
         if token:
             self._headers["Authorization"] = "Token %s" % token
         self._timeout = timeout
