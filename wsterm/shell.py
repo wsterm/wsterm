@@ -68,7 +68,7 @@ class Shell(object):
         else:
             import pty
 
-            cmdline = list(shlex.split(os.environ.get("SHELL", "sh")))
+            cmdline = list(shlex.split(os.environ.get("SHELL") or "bash"))
             exe = cmdline[0]
             if exe[0] != "/":
                 for it in os.environ["PATH"].split(":"):
@@ -76,6 +76,8 @@ class Shell(object):
                     if os.path.isfile(path):
                         exe = path
                         break
+                else:
+                    exe = "/bin/sh"
 
             utils.logger.info("[%s] Create shell %s" % (cls.__name__, cmdline))
             pid, fd = pty.fork()
@@ -90,7 +92,8 @@ class Shell(object):
             else:
                 proc = utils.Process(pid)
                 stdin = utils.AsyncFileDescriptor(fd)
-                stderr = stdout = utils.AsyncFileDescriptor(fd)
+                stdout = utils.AsyncFileDescriptor(fd)
+                stderr = None
 
         return cls(workspace, size, proc, stdin, stdout, stderr, fd)
 
