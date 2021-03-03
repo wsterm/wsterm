@@ -175,7 +175,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 "[%s] Create shell (%d, %d)"
                 % (self.__class__.__name__, *request["size"])
             )
-            print(session_id, session_timeout)
+
             ssm = ShellSessionManager()
             if self._shell:
                 await self.send_response(request, code=-1, message="Shell is created")
