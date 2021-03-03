@@ -365,13 +365,13 @@ class WSTerminalClient(object):
                     if char == b"\xe0":
                         char = msvcrt.getch()
                         if char == b"H":
-                            char = b"\x1b[A"
+                            char = b"\x1bOA"
                         elif char == b"P":
-                            char = b"\x1b[B"
+                            char = b"\x1bOB"
                         elif char == b"K":
-                            char = b"\x1b[D"
+                            char = b"\x1bOD"
                         elif char == b"M":
-                            char = b"\x1b[C"
+                            char = b"\x1bOC"
                         else:
                             utils.logger.warn(
                                 r"[%s] Unknown input key \xe0%s"
