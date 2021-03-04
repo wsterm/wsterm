@@ -380,6 +380,8 @@ class WSTerminalClient(object):
                     elif char == b"\x1d":
                         # Ctrl + ]
                         char = b"\x03"
+                    if server_platform == "win32":
+                        char = char.replace(b"\x1bO", b"\x1b[")
                     asyncio.ensure_future(self.write_shell_stdin(char))
                 else:
                     size = await self.adjust_window_size(size)
