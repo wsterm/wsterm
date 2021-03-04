@@ -65,6 +65,7 @@ class Shell(object):
             stdin = proc.stdin
             stdout = proc.stdout
             stderr = proc.stderr
+            fd = None
         else:
             import pty
 
