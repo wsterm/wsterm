@@ -94,7 +94,11 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         self._buffer += message
         packet, self._buffer = proto.TransportPacket.deserialize(self._buffer)
         if packet:
-            await self.handle_request(packet.message)
+            try:
+                await self.handle_request(packet.message)
+            except Exception as ex:
+                utils.logger.exception("Handle request %s failed" % packet.message)
+                await self.send_response(packet.message, -1, str(ex))
 
     async def send_request(self, command, **kwargs):
         self._sequence += 1
