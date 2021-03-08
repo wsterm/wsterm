@@ -95,8 +95,8 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
 
     async def handle_request(self, request):
         if request["command"] == proto.EnumCommand.WRITE_STDOUT:
-            sys.stdout.buffer.write(request["buffer"])
-            sys.stdout.flush()
+            if self._handler:
+                await self._handler.on_shell_stdout(request["buffer"])
         elif request["command"] == proto.EnumCommand.EXIT_SHELL:
             if self._handler:
                 self._handler.on_shell_exit()
@@ -157,6 +157,7 @@ class WSTerminalClient(object):
         self._session_id = None
         self._workspace = None
         self._running = False
+        self._download_file = {}
 
     @property
     def auto_reconnect(self):
@@ -294,6 +295,101 @@ class WSTerminalClient(object):
             )
             self.on_connection_close()
 
+    async def on_shell_stdout(self, buffer):
+        if buffer.endswith(b"**\x18B00000000000000\r\x8a\x11"):
+            sys.stdout.buffer.write(
+                b"Starting zmodem transfer.  Press Ctrl+C to cancel.\n"
+            )
+            sys.stdout.flush()
+            buffer = b"**\x18B01000000039a32\n\n"
+            await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
+        elif buffer.startswith(b"*\x18A\x04\x00\x00\x00\x00\x89\x06"):
+            pos = buffer.find(b"\x00", 10)
+            self._download_file["name"] = buffer[10:pos].decode()
+            pos2 = buffer.find(b" ", pos)
+            self._download_file["size"] = int(buffer[pos + 1 : pos2])
+            self._download_file["buffer"] = b""
+            sys.stdout.buffer.write(
+                b"Transferring %s...\n" % self._download_file["name"].encode()
+            )
+            buffer = b"**\x18B0900000000a87c\n\n"
+            await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
+        elif self._download_file.get("name"):
+            # download file
+
+            if buffer.startswith(b"*\x18A\n\x00\x00\x00\x00F\xae"):
+                pos = buffer.find(b"\x18h", 10)
+                if pos > 0:
+                    buffer = buffer[10 : pos + 1]
+                else:
+                    buffer = buffer[10:]
+                self._download_file["buffer"] += buffer
+            else:
+                self._download_file["buffer"] += buffer
+
+            sys.stdout.buffer.write(
+                b"\r%d/%d"
+                % (len(self._download_file["buffer"]), self._download_file["size"])
+            )
+            if (
+                len(self._download_file["buffer"]) >= self._download_file["size"]
+                and b"\x18h" in buffer
+            ):
+                # last frame received
+                pos = buffer.rfind(b"\x18h")
+                if pos > 0:
+                    self._download_file["buffer"] = self._download_file["buffer"][
+                        : pos - len(buffer)
+                    ]
+                offset = 0
+                buffer = b""
+                while offset < len(self._download_file["buffer"]):
+                    pos = self._download_file["buffer"].find(b"\x18i", offset)
+                    if pos > 0:
+                        buff = self._download_file["buffer"][offset:pos]
+                    else:
+                        buff = self._download_file["buffer"][offset:]
+
+                    buffer += buff
+                    offset += len(buff)
+                    offset += 2  # \x18i
+                    index = 0
+                    while index < 2 and offset + index < len(
+                        self._download_file["buffer"]
+                    ):
+                        # ignore \x18 char
+                        if self._download_file["buffer"][offset + index] == 0x18:
+                            offset += 1
+                        else:
+                            index += 1
+                    offset += 2
+
+                mapping_table = {
+                    b"\x18\x4d": b"\x0d",
+                    b"\x18\x50": b"\x10",
+                    b"\x18\x51": b"\x11",
+                    b"\x18\x53": b"\x13",
+                    b"\x18\xcd": b"\x8d",
+                    b"\x18\xd0": b"\x90",
+                    b"\x18\xd1": b"\x91",
+                    b"\x18\xd3": b"\x93",
+                    b"\x18\x58": b"\x18",
+                }
+                for key in mapping_table:
+                    buffer = buffer.replace(key, mapping_table[key])
+
+                with open(self._download_file["name"], "wb") as fp:
+                    fp.write(buffer)
+
+                self._download_file = {}
+                buffer = b"**\x18B0800000000022d\n\n"
+                await self._conn.send_request(
+                    proto.EnumCommand.WRITE_STDIN, buffer=buffer
+                )
+        else:
+            sys.stdout.buffer.write(buffer)
+            sys.stdout.flush()
+
     def on_shell_exit(self):
         self._running = False
         self._auto_reconnect = False
@@ -348,6 +444,7 @@ class WSTerminalClient(object):
                         if char == b"\x1b":
                             chars = shell_stdin.read(2)
                             char += chars  # Must send together
+
                     utils.safe_ensure_future(self.write_shell_stdin(char))
 
                 self._loop.add_reader(shell_stdin, on_input)

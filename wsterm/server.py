@@ -94,7 +94,11 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         self._buffer += message
         packet, self._buffer = proto.TransportPacket.deserialize(self._buffer)
         if packet:
-            await self.handle_request(packet.message)
+            try:
+                await self.handle_request(packet.message)
+            except Exception as ex:
+                utils.logger.exception("Handle request %s failed" % packet.message)
+                await self.send_response(packet.message, -1, str(ex))
 
     async def send_request(self, command, **kwargs):
         self._sequence += 1
@@ -308,5 +312,5 @@ def start_server(listen_address, path, token=None):
     utils.logger.info("Websocket server listening at %s:%d" % listen_address)
     WSTerminalServerHandler.token = token
     handlers = [(path, WSTerminalServerHandler), ("/", MainHandler)]
-    app = tornado.web.Application(handlers)
+    app = tornado.web.Application(handlers, websocket_ping_interval=30)
     app.listen(listen_address[1], listen_address[0])
