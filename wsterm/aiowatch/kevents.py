@@ -83,9 +83,7 @@ class KEventsWatcher(WatcherBackendBase):
             watch_path, _, fd = self._watch_list[evt_id]
             if path == watch_path:
                 event = select.kevent(
-                    fd,
-                    filter=select.KQ_FILTER_VNODE,
-                    flags=select.KQ_EV_DELETE,
+                    fd, filter=select.KQ_FILTER_VNODE, flags=select.KQ_EV_DELETE,
                 )
                 # self._kq.control((event,), 0)
                 self._watch_list.pop(evt_id)
@@ -99,11 +97,15 @@ class KEventsWatcher(WatcherBackendBase):
                 await asyncio.sleep(0.005)
                 continue
             events.sort(
-                key=lambda event: len(self._watch_list[event.ident][0].split("/")),
+                key=lambda event: len(self._watch_list[event.ident][0].split("/"))
+                if self._watch_list.get(event.ident)
+                else 0,
                 reverse=True,
             )  # Ensure remove inner items first when remove directory
 
             for event in events:
+                if event.ident not in self._watch_list:
+                    continue
                 target, _, _ = self._watch_list[event.ident]
                 if not os.path.exists(target):
                     # Item removed
@@ -154,10 +156,11 @@ class KEventsWatcher(WatcherBackendBase):
                     for event in new_events:
                         self._event_queue.put_nowait(event)
                         if event.event == WatchEvent.FILE_CREATED:
-                            self.add_watch(event.target)
-                            self._event_queue.put_nowait(
-                                WatchEvent(WatchEvent.FILE_MODIFIED, event.target)
-                            )
+                            if os.path.isfile(event.target):
+                                self.add_watch(event.target)
+                                self._event_queue.put_nowait(
+                                    WatchEvent(WatchEvent.FILE_MODIFIED, event.target)
+                                )
                         elif event.event == WatchEvent.DIRECTORY_CREATED:
                             self.add_dir_watch(event.target)
                     continue
