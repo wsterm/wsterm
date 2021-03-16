@@ -18,6 +18,8 @@ from . import client, server, utils
 
 async def connect_server(url, workspace, token=None, auto_reconnect=False):
     print("Connecting to remote terminal %s" % url)
+    if workspace:
+        workspace = os.path.abspath(workspace)
     cli = client.WSTerminalClient(url, token=token, auto_reconnect=auto_reconnect)
     while True:
         if not await cli.connect():
