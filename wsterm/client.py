@@ -431,21 +431,36 @@ class WSTerminalClient(object):
         if response["code"]:
             raise RuntimeError("Create shell failed: %s" % response["message"])
         server_platform = response["platform"]
+        line_mode = response.get("line_mode", False)
         if not self._session_id and self._auto_reconnect:
             self._session_id = response["session"]
+        line_editor = None
+        if line_mode:
+            line_editor = utils.LineEditor()
         if sys.platform != "win32":
             with utils.UnixStdIn() as shell_stdin:
 
                 def on_input():
                     char = shell_stdin.read(1)
-                    if char == b"\n":
-                        char = b"\r"
-                    if server_platform == "win32":
-                        if char == b"\x1b":
-                            chars = shell_stdin.read(2)
-                            char += chars  # Must send together
+                    if char == b"\x03":
+                        asyncio.ensure_future(self.write_shell_stdin(char))
+                        return
+                    elif char == b"\x1b":
+                        char += shell_stdin.read(2)
 
-                    utils.safe_ensure_future(self.write_shell_stdin(char))
+                    if line_editor:
+                        line = line_editor.input(char)
+                        if line:
+                            asyncio.ensure_future(self.write_shell_stdin(line))
+                    else:
+                        if char == b"\n":
+                            char = b"\r"
+                        if server_platform == "win32":
+                            if char == b"\x1b":
+                                chars = shell_stdin.read(2)
+                                char += chars  # Must send together
+
+                        utils.safe_ensure_future(self.write_shell_stdin(char))
 
                 self._loop.add_reader(shell_stdin, on_input)
 
@@ -459,6 +474,7 @@ class WSTerminalClient(object):
             while self._running:
                 if msvcrt.kbhit():
                     char = msvcrt.getch()
+
                     if char == b"\xe0":
                         char = msvcrt.getch()
                         if char == b"H":
@@ -477,9 +493,17 @@ class WSTerminalClient(object):
                     elif char == b"\x1d":
                         # Ctrl + ]
                         char = b"\x03"
-                    if server_platform == "win32":
-                        char = char.replace(b"\x1bO", b"\x1b[")
-                    asyncio.ensure_future(self.write_shell_stdin(char))
+                        asyncio.ensure_future(self.write_shell_stdin(char))
+                        continue
+
+                    if line_editor:
+                        line = line_editor.input(char)
+                        if line:
+                            asyncio.ensure_future(self.write_shell_stdin(line))
+                    else:
+                        if server_platform == "win32":
+                            char = char.replace(b"\x1bO", b"\x1b[")
+                        asyncio.ensure_future(self.write_shell_stdin(char))
                 else:
                     size = await self.adjust_window_size(size)
                     await asyncio.sleep(0.02)

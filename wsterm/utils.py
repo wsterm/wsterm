@@ -132,6 +132,94 @@ class Singleton(object):
         return self.__instance
 
 
+class LineEditor(object):
+    def __init__(self):
+        self._buffer = b""
+        self._prev_buffer = b""
+        self._cursor = 0
+        self._prev_cursor = 0
+        self._history = []
+        self._history_index = 0
+
+    def _clear_buffer(self, size):
+        bs_key = b"\x08" if sys.platform == "win32" else b"\x1b[D"
+        sys.stdout.buffer.write(bs_key * size)
+        sys.stdout.buffer.write(b" " * size)
+        sys.stdout.buffer.write(bs_key * size)
+
+    def input(self, char):
+        bs_key = b"\x08" if sys.platform == "win32" else b"\x1b[D"
+        if char in (b"\x1bOD", b"\x1b[D"):
+            if self._cursor > 0:
+                self._cursor -= 1
+        elif char in (b"\x1bOC", b"\x1b[C"):
+            if self._cursor < len(self._buffer):
+                self._cursor += 1
+        elif char in (b"\x1bOA", b"\x1b[A"):
+            if abs(self._history_index) >= len(self._history):
+                return
+            self._history_index -= 1
+            self._clear_buffer(self._prev_cursor)
+            sys.stdout.buffer.write(self._history[self._history_index])
+            sys.stdout.buffer.flush()
+            self._buffer = self._prev_buffer = self._history[self._history_index]
+            self._cursor = self._prev_cursor = len(self._buffer)
+            return
+        elif char in (b"\x1bOB", b"\x1b[B"):
+            if self._history_index >= -1:
+                return
+            self._history_index += 1
+            self._clear_buffer(self._prev_cursor)
+            sys.stdout.buffer.write(self._history[self._history_index])
+            sys.stdout.buffer.flush()
+            self._buffer = self._prev_buffer = self._history[self._history_index]
+            self._cursor = self._prev_cursor = len(self._buffer)
+            return
+        elif char in (b"\x08", b"\x7f"):
+            if self._cursor > 0:
+                self._buffer = (
+                    self._buffer[: self._cursor - 1] + self._buffer[self._cursor :]
+                )
+                self._cursor -= 1
+        elif char in (b"\r", b"\n"):
+            if self._buffer:
+                self._history.append(self._buffer)
+                self._history_index = 0
+            buffer = self._buffer + b"\n"
+            self._buffer = b""
+            self._cursor = 0
+            if self._prev_cursor:
+                sys.stdout.buffer.write(bs_key * self._prev_cursor)
+                self._prev_buffer = b""
+                self._prev_cursor = 0
+
+            return buffer
+        elif char == b"\x03":
+            raise KeyboardInterrupt()
+        else:
+            self._buffer = (
+                self._buffer[: self._cursor] + char + self._buffer[self._cursor :]
+            )
+            self._cursor += 1
+
+        if self._prev_cursor:
+            sys.stdout.buffer.write(bs_key * self._prev_cursor)
+
+        sys.stdout.buffer.write(self._buffer)
+        if len(self._buffer) < len(self._prev_buffer):
+            # Remove deleted chars
+            sys.stdout.buffer.write(b" " * (len(self._prev_buffer) - len(self._buffer)))
+            sys.stdout.buffer.write(
+                bs_key * (len(self._prev_buffer) - len(self._buffer))
+            )
+
+        if self._cursor < len(self._buffer):
+            sys.stdout.buffer.write(bs_key * (len(self._buffer) - self._cursor))
+        sys.stdout.buffer.flush()
+        self._prev_buffer = self._buffer
+        self._prev_cursor = self._cursor
+
+
 def safe_ensure_future(coro, loop=None):
     loop = loop or asyncio.get_event_loop()
     fut = loop.create_future()

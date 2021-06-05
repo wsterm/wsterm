@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import ctypes
 import os
 import sys
 import time
@@ -219,15 +220,24 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                             request, code=-1, message="Spawn shell timeout"
                         )
                         return
+
+                    line_mode = sys.platform == "win32" and not hasattr(
+                        ctypes.windll.kernel32, "CreatePseudoConsole"
+                    )
                     if session_timeout:
                         self._session_id = ssm.create_session(
                             self._shell, session_timeout
                         )
                         await self.send_response(
-                            request, platform=sys.platform, session=self._session_id
+                            request,
+                            platform=sys.platform,
+                            session=self._session_id,
+                            line_mode=line_mode,
                         )
                     else:
-                        await self.send_response(request, platform=sys.platform)
+                        await self.send_response(
+                            request, platform=sys.platform, line_mode=line_mode
+                        )
         elif request["command"] == proto.EnumCommand.WRITE_STDIN:
             if not self._shell:
                 await self.send_response(request, code=-1, message="Shell not create")
@@ -263,6 +273,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
         tasks = [None]
         if self._shell.stderr:
             tasks.append(None)
+
         while self._shell and self._shell.process.returncode is None:
             if tasks[0] is None:
                 tasks[0] = utils.safe_ensure_future(self._shell.stdout.read(4096))
@@ -283,6 +294,8 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                     break
 
                 if self._shell:
+                    if sys.platform == "win32":
+                        buffer = buffer.decode("gbk").encode("utf-8") # TODO: fixme
                     await self.write_shell_stdout(buffer)
         utils.logger.warn("[%s] Shell process exit" % self.__class__.__name__)
         if self._shell:
