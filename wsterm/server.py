@@ -224,6 +224,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                     line_mode = sys.platform == "win32" and not hasattr(
                         ctypes.windll.kernel32, "CreatePseudoConsole"
                     )
+
                     if session_timeout:
                         self._session_id = ssm.create_session(
                             self._shell, session_timeout
@@ -257,8 +258,11 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 self._shell.resize(request["size"])
                 await self.send_response(request)
 
-    async def write_shell_stdout(self, buffer):
-        utils.logger.debug("[%s] Output %s" % (self.__class__.__name__, buffer))
+    async def write_shell_stdout(self, buffer, errput=False):
+        if not errput:
+            utils.logger.debug("[%s] Output %s" % (self.__class__.__name__, buffer))
+        else:
+            utils.logger.debug("[%s] Errorput %s" % (self.__class__.__name__, buffer))
         await self.send_request(proto.EnumCommand.WRITE_STDOUT, buffer=buffer)
 
     async def spawn_shell(self, workspace, size):
@@ -294,9 +298,11 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                     break
 
                 if self._shell:
-                    if sys.platform == "win32":
-                        buffer = buffer.decode("gbk").encode("utf-8") # TODO: fixme
-                    await self.write_shell_stdout(buffer)
+                    if sys.platform == "win32" and not hasattr(
+                        ctypes.windll.kernel32, "CreatePseudoConsole"
+                    ):
+                        buffer = buffer.decode("gbk").encode("utf-8")  # TODO: fixme
+                    await self.write_shell_stdout(buffer, index > 0)
         utils.logger.warn("[%s] Shell process exit" % self.__class__.__name__)
         if self._shell:
             await self.send_request(proto.EnumCommand.EXIT_SHELL)
