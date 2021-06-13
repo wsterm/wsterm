@@ -63,7 +63,7 @@ class Shell(object):
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    close_fds=True,
+                    close_fds=False,
                 )
                 stdin = proc.stdin
             else:
@@ -90,7 +90,7 @@ class Shell(object):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     creationflags=CREATE_NEW_CONSOLE,
-                    close_fds=True,
+                    close_fds=False,
                     startupinfo=si,
                 )
 

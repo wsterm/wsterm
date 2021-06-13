@@ -25,7 +25,6 @@ async def create_process(*cmd, size=None, pipe=None):
     if pipe:
         pipe = utils.Win32NamedPipe(pipe)
         await pipe.listen(10)
-        print("client connected")
 
     if not size:
         terminal_size = shutil.get_terminal_size()

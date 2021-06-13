@@ -274,11 +274,15 @@ class Win32ConsoleOutputPipe(object):
         import win32console
         import win32security
 
-        self._width, self._height = self._size = size
-        self._height *= 256
-        self._max_size = self._width * self._height
         sa = win32security.SECURITY_ATTRIBUTES()
         self._console = win32console.CreateConsoleScreenBuffer(SecurityAttributes=sa)
+        self._width, self._height = self._size = size
+        csbi = self._console.GetConsoleScreenBufferInfo()
+        if csbi["Size"].X > self._width:
+            self._width = csbi["Size"].X
+            self._height = csbi["Size"].Y
+        self._height *= 256
+        self._max_size = self._width * self._height
         self._console.SetConsoleCursorPosition(win32console.PyCOORDType(0, 0))
         self._console.SetConsoleScreenBufferSize(
             win32console.PyCOORDType(self._width, self._height)
