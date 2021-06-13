@@ -5,7 +5,9 @@ import ctypes
 import os
 import shlex
 import struct
+import subprocess
 import sys
+import uuid
 
 from . import utils
 
@@ -41,6 +43,8 @@ class Shell(object):
     async def create(cls, workspace, size=None):
         size = size or (80, 23)
         if sys.platform == "win32":
+            import win32con
+
             if hasattr(ctypes.windll.kernel32, "CreatePseudoConsole"):
                 cmd = (
                     "conhost.exe",
@@ -52,17 +56,49 @@ class Shell(object):
                     "--",
                     "cmd.exe",
                 )
+
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    cwd=workspace,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    close_fds=True,
+                )
+                stdin = proc.stdin
             else:
-                cmd = ("cmd.exe",)
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                cwd=workspace,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                close_fds=False
-            )
-            stdin = proc.stdin
+                pipe_name = str(uuid.uuid4())
+                cmd = (
+                    sys.executable,
+                    "-u",
+                    "-m",
+                    "wsterm.win32pty",
+                    "--size",
+                    "%d,%d" % tuple(size),
+                    "--pipe",
+                    pipe_name,
+                    "cmd.exe",
+                )
+                CREATE_NEW_CONSOLE = 0x10
+                CREATE_NO_WINDOW = 0x08000000
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = win32con.SW_HIDE
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    cwd=workspace,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    creationflags=CREATE_NEW_CONSOLE,
+                    close_fds=True,
+                    startupinfo=si,
+                )
+
+                pipe = utils.Win32NamedPipe(pipe_name)
+
+                utils.safe_ensure_future(pipe.connect(10))
+                stdin = pipe
+
             stdout = proc.stdout
             stderr = proc.stderr
             fd = None
