@@ -25,7 +25,6 @@ class WatcherBackendBase(object):
     def add_watch(self, path):
         raise NotImplementedError()
 
-
     async def read_event(self):
         raise NotImplementedError()
 
@@ -63,7 +62,7 @@ class AIOWatcher(object):
     def __init__(self, root_path, handler):
         self._root_path = root_path
         self._handler = handler
-        self._filter = self._handler.on_watch_filter
+        self._filter = getattr(self._handler, "on_watch_filter", None)
         self._backend = self._get_backend()
         self._running = True
 
