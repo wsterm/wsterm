@@ -64,6 +64,7 @@ def main():
         action="store_true",
         default=False,
     )
+    parser.add_argument("--limit", type=int, help="Opening file handle limit")
 
     args = sys.argv[1:]
     if not args:
@@ -122,6 +123,13 @@ def main():
         )
         handler.setFormatter(formatter)
         utils.logger.addHandler(handler)
+
+    if args.limit and sys.platform in ("darwin",):
+        import resource
+
+        _, max_file = resource.getrlimit(resource.RLIMIT_NOFILE)
+        print("Set file handle limit to %d" % args.limit)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (args.limit, max_file))
 
     if args.server:
         host = url.hostname
