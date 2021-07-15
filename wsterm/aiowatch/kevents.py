@@ -11,8 +11,8 @@ O_EVTONLY = 0x8000
 
 
 class KEventsWatcher(WatcherBackendBase):
-    def __init__(self, loop=None):
-        super(KEventsWatcher, self).__init__(loop)
+    def __init__(self, loop=None, filter=None):
+        super(KEventsWatcher, self).__init__(loop, filter)
         self._kq = select.kqueue()
         self._watch_list = {}
         self._dir_tree = {}
@@ -55,6 +55,8 @@ class KEventsWatcher(WatcherBackendBase):
         node = self._get_dir_node(path, True)
         for it in os.listdir(path):
             subpath = os.path.join(path, it)
+            if self.should_ignore(subpath):
+                continue
             if os.path.isdir(subpath):
                 node[it] = {}
                 self.add_dir_watch(subpath)
@@ -63,6 +65,8 @@ class KEventsWatcher(WatcherBackendBase):
                 self.add_watch(subpath)
 
     def add_watch(self, path):
+        if self.should_ignore(path):
+            return
         fd = os.open(path, O_EVTONLY)
         event = select.kevent(
             fd,
