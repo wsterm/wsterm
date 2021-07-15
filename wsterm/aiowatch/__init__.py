@@ -8,12 +8,19 @@ import sys
 
 
 class WatcherBackendBase(object):
-    def __init__(self, loop=None):
+    def __init__(self, loop=None, filter=None):
         self._loop = loop or asyncio.get_event_loop()
+        self._filter = filter
         self._event_queue = asyncio.Queue()
 
     def add_dir_watch(self, path):
         raise NotImplementedError()
+
+    def should_ignore(self, path):
+        if self._filter:
+            if self._filter(path):
+                return True
+        return False
 
     def add_watch(self, path):
         raise NotImplementedError()
@@ -54,8 +61,9 @@ class WatchEvent(object):
 class AIOWatcher(object):
     def __init__(self, root_path, handler):
         self._root_path = root_path
-        self._backend = self._get_backend()
         self._handler = handler
+        self._filter = getattr(self._handler, "on_watch_filter", None)
+        self._backend = self._get_backend()
         self._running = True
 
     def _get_backend(self):
@@ -70,7 +78,7 @@ class AIOWatcher(object):
         elif sys.platform == "darwin":
             from . import kevents
 
-            return kevents.KEventsWatcher()
+            return kevents.KEventsWatcher(filter=self._filter)
         else:
             raise NotImplementedError(sys.platform)
 

@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import os
+import pathlib
 import shutil
 
 import gitignore_parser
@@ -82,16 +83,47 @@ class File(object):
 
 class Workspace(object):
     def __init__(self, root_path):
-        self._root_path = root_path
+        self._root_path = os.path.abspath(root_path)
         if not os.path.isdir(self._root_path):
             os.makedirs(self._root_path)
         self._handlers = []
+        self._ignore_rules = []
+        self._build_ignore_rules()
         self._watcher = aiowatch.AIOWatcher(self._root_path, self)
         self._running = True
 
     @property
     def path(self):
         return self._root_path
+
+    def _build_ignore_rules(self):
+        gitignore_path = os.path.join(self._root_path, ".gitignore")
+        ignore_text = ".git/\n"
+        if os.path.isfile(gitignore_path):
+            with open(gitignore_path) as fp:
+                ignore_text += fp.read()
+
+        for line in ignore_text.splitlines():
+            if not line.strip():
+                continue
+
+            rule = gitignore_parser.rule_from_pattern(
+                line, base_path=pathlib.Path(self._root_path), source=None
+            )
+            if rule:
+                self._ignore_rules.append(rule)
+
+    def on_watch_filter(self, path):
+        if os.path.islink(path):
+            path = os.readlink(path)
+        if not os.path.exists(path):
+            return True
+        if not path.startswith(self._root_path):
+            return True
+        for rule in self._ignore_rules:
+            if rule.match(path):
+                return True
+        return False
 
     def join_path(self, path):
         return os.path.join(self._root_path, path.replace("/", os.path.sep))
