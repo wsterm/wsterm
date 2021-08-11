@@ -125,7 +125,7 @@ def main():
         utils.logger.addHandler(handler)
 
     if args.limit and sys.platform in ("darwin",):
-        import resource
+        resource = utils.safe_import("resource", "setrlimit")
 
         _, max_file = resource.getrlimit(resource.RLIMIT_NOFILE)
         print("Set file handle limit to %d" % args.limit)

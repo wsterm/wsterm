@@ -300,3 +300,24 @@ def win32_daemon():
 
     DETACHED_PROCESS = 8
     subprocess.Popen(cmdline, creationflags=DETACHED_PROCESS, close_fds=True)
+
+
+def safe_import(module_name, attr):
+    sys_path = sys.path
+    module = None
+    for path in sys_path:
+        sys.path = [path]
+        try:
+            module = __import__(module_name)
+        except ImportError:
+            pass
+        else:
+            if getattr(module, attr, None):
+                break
+            else:
+                del sys.modules[module_name]
+
+    sys.path = sys_path
+    if not module:
+        raise ImportError("No module named %r" % module_name)
+    return module
