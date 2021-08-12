@@ -220,7 +220,7 @@ class WSTerminalClient(object):
         with open(self._workspace.join_path(file_path), "rb") as fp:
             while True:
                 data = fp.read(self.file_fragment_size)
-                if not data:
+                if not data and offset:
                     break
                 await self._conn.send_request(
                     proto.EnumCommand.WRITE_FILE,
@@ -228,6 +228,8 @@ class WSTerminalClient(object):
                     data=data,
                     overwrite=offset == 0,
                 )
+                if not data:
+                    break
                 offset += len(data)
 
     async def remove_file(self, file_path):
