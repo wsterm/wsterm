@@ -1,0 +1,41 @@
+name: Remote-Debug-Windows
+on:
+  watch:
+    types: started
+jobs:
+  SSH:
+    name: Run on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      max-parallel: 3
+      matrix:
+        python-version: [3.6]
+        os: [windows-latest]
+    env:
+      PYTHONIOENCODING: UTF-8
+      WSTERM_WORKSPACE: D:\a
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 2.7
+        uses: actions/setup-python@v1
+        with:
+          python-version: 2.7
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Setup environment
+        run: |
+          copy C:\hostedtoolcache\windows\Python\2.7.18\x64\python.exe C:\hostedtoolcache\windows\Python\2.7.18\x64\python2.exe
+          python2 -m pip -V
+          python2 -m pip install virtualenv
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Start wsterm server
+        run: |
+          curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
+          python frp.py 8080 5080 &
+          echo "Url: ws://vip.frp.wlphp.com:5080/terminal/"
+          python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
