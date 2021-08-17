@@ -1,5 +1,8 @@
 name: Remote-Debug-Windows
 on:
+  push:
+    branches:
+      - debug/*
   watch:
     types: started
 jobs:
