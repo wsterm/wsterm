@@ -149,8 +149,8 @@ DEFAULT_EVENT_BUFFER_SIZE = DEFAULT_NUM_EVENTS * (EVENT_SIZE + 16)
 class INotifyWatcher(WatcherBackendBase):
     """inotify implementation"""
 
-    def __init__(self, loop=None):
-        super(INotifyWatcher, self).__init__(loop)
+    def __init__(self, loop=None, filter=None):
+        super(INotifyWatcher, self).__init__(loop, filter)
         self._inotify_fd = libc.inotify_init()
         if self._inotify_fd == -1:
             INotifyWatcher._raise_error()
@@ -187,6 +187,8 @@ class INotifyWatcher(WatcherBackendBase):
 
     def add_dir_watch(self, path, mask=InotifyConstants.IN_ALL_EVENTS):
         assert os.path.isdir(path)
+        if self.should_ignore(path):
+            return
         for it in os.listdir(path):
             subpath = os.path.join(path, it)
             if os.path.isdir(subpath):
@@ -194,6 +196,8 @@ class INotifyWatcher(WatcherBackendBase):
         self.add_watch(path, mask)
 
     def add_watch(self, path, mask=InotifyConstants.IN_ALL_EVENTS):
+        if self.should_ignore(path):
+            return
         wd = libc.inotify_add_watch(self._inotify_fd, path.encode(), mask)
         if wd == -1:
             INotifyWatcher._raise_error()

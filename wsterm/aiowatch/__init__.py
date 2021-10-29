@@ -70,11 +70,11 @@ class AIOWatcher(object):
         if sys.platform == "linux":
             from . import inotify
 
-            return inotify.INotifyWatcher()
+            return inotify.INotifyWatcher(filter=self._filter)
         elif sys.platform == "win32":
             from . import win32
 
-            return win32.Win32Watcher()
+            return win32.Win32Watcher(filter=self._filter)
         elif sys.platform == "darwin":
             from . import kevents
 
