@@ -217,20 +217,26 @@ class WSTerminalClient(object):
     async def write_file(self, file_path):
         utils.logger.debug("[%s] Write file %s" % (self.__class__.__name__, file_path))
         offset = 0
-        with open(self._workspace.join_path(file_path), "rb") as fp:
-            while True:
-                data = fp.read(self.file_fragment_size)
-                if not data and offset:
-                    break
-                await self._conn.send_request(
-                    proto.EnumCommand.WRITE_FILE,
-                    path=file_path.replace(os.path.sep, "/"),
-                    data=data,
-                    overwrite=offset == 0,
-                )
-                if not data:
-                    break
-                offset += len(data)
+        try:
+            with open(self._workspace.join_path(file_path), "rb") as fp:
+                while True:
+                    data = fp.read(self.file_fragment_size)
+                    if not data and offset:
+                        break
+                    await self._conn.send_request(
+                        proto.EnumCommand.WRITE_FILE,
+                        path=file_path.replace(os.path.sep, "/"),
+                        data=data,
+                        overwrite=offset == 0,
+                    )
+                    if not data:
+                        break
+                    offset += len(data)
+        except FileNotFoundError:
+            utils.logger.warn(
+                "[%s] File %s removed before read"
+                % (self.__class__.__name__, file_path)
+            )
 
     async def remove_file(self, file_path):
         utils.logger.info("[%s] Remove file %s" % (self.__class__.__name__, file_path))
@@ -249,21 +255,33 @@ class WSTerminalClient(object):
         )
 
     async def on_directory_created(self, path):
+        utils.logger.debug(
+            "[%s] New directory %s created" % (self.__class__.__name__, path)
+        )
         await self.create_directory(path)
 
     async def on_directory_removed(self, path):
+        utils.logger.debug(
+            "[%s] Directory %s removed" % (self.__class__.__name__, path)
+        )
         await self.remove_directory(path)
 
     async def on_file_created(self, path):
-        pass
+        utils.logger.debug("[%s] New file %s created" % (self.__class__.__name__, path))
 
     async def on_file_modified(self, path):
+        utils.logger.debug("[%s] File %s modified" % (self.__class__.__name__, path))
         await self.write_file(path)
 
     async def on_file_removed(self, path):
+        utils.logger.debug("[%s] File %s removed" % (self.__class__.__name__, path))
         await self.remove_file(path)
 
     async def on_item_moved(self, src_path, dst_path):
+        utils.logger.debug(
+            "[%s] Item %s moved from %s to %s"
+            % (self.__class__.__name__, src_path, dst_path)
+        )
         await self.move_item(src_path, dst_path)
 
     async def sync_workspace(self, workspace_path):

@@ -98,7 +98,7 @@ class Workspace(object):
 
     def _build_ignore_rules(self):
         gitignore_path = os.path.join(self._root_path, ".gitignore")
-        ignore_text = ".git/\n"
+        ignore_text = ".git/\n.env2/\n.env3/\n*.pyc\n"
         if os.path.isfile(gitignore_path):
             with open(gitignore_path) as fp:
                 ignore_text += fp.read()
@@ -114,15 +114,22 @@ class Workspace(object):
                 self._ignore_rules.append(rule)
 
     def on_watch_filter(self, path):
+        path = os.path.join(self._root_path, path)
         if os.path.islink(path):
             path = os.readlink(path)
         if not os.path.exists(path):
+            utils.logger.info(
+                "[%s] Path %s not exist" % (self.__class__.__name__, path)
+            )
             return True
         if not path.startswith(self._root_path):
+            utils.logger.info(
+                "[%s] Path %s not start with %s"
+                % (self.__class__.__name__, path, self._root_path)
+            )
             return True
-        for rule in self._ignore_rules:
-            if rule.match(path):
-                return True
+        if self.path_should_ignored(path):
+            return True
         return False
 
     def join_path(self, path):
@@ -187,38 +194,36 @@ class Workspace(object):
     def on_item_moved(self, src_path, dst_path):
         self.on_event(EnumEvent.ON_ITEM_MOVED, src_path=src_path, dst_path=dst_path)
 
+    def path_should_ignored(self, path):
+        for rule in self._ignore_rules:
+            if rule.match(path):
+                utils.logger.info(
+                    "[%s] Path %s ignored due to rule %s"
+                    % (self.__class__.__name__, path, rule)
+                )
+                return True
+        return False
+
     def snapshot(self, root=None):
         result = {"dirs": {}, "files": {}}
         root = root or self._root_path
         if os.path.isdir(root) and os.path.split(root)[-1] == ".git":
             # Auto ignore .git directory
             return
-        gitignore_path = os.path.join(self._root_path, ".gitignore")
-        if os.path.isfile(gitignore_path):
-            matches = gitignore_parser.parse_gitignore(gitignore_path)
-            match = False
-            try:
-                match = matches(root)
-            except ValueError:
-                utils.logger.info(
-                    "[%s] Ignore invalid path %s" % (self.__class__.__name__, root)
-                )
-                return None
 
-            if match:
-                utils.logger.debug(
-                    "[%s] Path %s ignored" % (self.__class__.__name__, root)
-                )
-                return None
+        if self.path_should_ignored(root):
+            return
 
         root_dir = Directory(root)
         for subdir in root_dir.get_dirs():
+            if self.path_should_ignored(subdir.path):
+                continue
             res = self.snapshot(subdir.path)
             if res:
                 result["dirs"][subdir.name] = res
         for file in root_dir.get_files():
-            if file.name.endswith(".pyc"):
-                # Auto ignore .pyc files
+            if self.path_should_ignored(file.path):
+                # Ignore current file
                 continue
             result["files"][file.name] = file.hash
         return result
