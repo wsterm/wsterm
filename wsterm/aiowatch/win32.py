@@ -26,8 +26,8 @@ class EnumWatchType(object):
 
 
 class Win32Watcher(WatcherBackendBase):
-    def __init__(self, loop=None):
-        super(Win32Watcher, self).__init__(loop)
+    def __init__(self, loop=None, filter=None):
+        super(Win32Watcher, self).__init__(loop, filter)
         self._watch_list = []
         asyncio.ensure_future(self.polling_task())
         self._dir_tree = {}
