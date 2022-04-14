@@ -195,6 +195,11 @@ class Workspace(object):
         self.on_event(EnumEvent.ON_ITEM_MOVED, src_path=src_path, dst_path=dst_path)
 
     def path_should_ignored(self, path):
+        if os.path.islink(path):
+            utils.logger.info(
+                "[%s] Link path %s is ignored" % (self.__class__.__name__, path)
+            )
+            return True
         for rule in self._ignore_rules:
             if rule.match(path):
                 utils.logger.info(
