@@ -300,6 +300,8 @@ class WSTerminalClient(object):
             proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_name,
         )
         response = await self._conn.read_response(request)
+        if response["code"] != 0:
+            raise utils.WSTermRuntimeError(response["code"], response["message"])
         diff_result = self._workspace.make_diff(response["data"])
         if diff_result:
             await self.update_workspace(diff_result, "")
