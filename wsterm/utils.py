@@ -14,6 +14,23 @@ import sys
 logger = logging.getLogger("wsterm")
 
 
+class WSTermRuntimeError(RuntimeError):
+    def __init__(self, code, message):
+        self._code = code
+        self._message = message
+
+    @property
+    def code(self):
+        return self._code
+
+    @property
+    def message(self):
+        return self._message
+
+    def __str__(self):
+        return "[%d] %s" % (self._code, self._message)
+
+
 class ConnectWebsocketServerFailed(RuntimeError):
     pass
 
