@@ -11,8 +11,8 @@ jobs:
     strategy:
       max-parallel: 3
       matrix:
-        python-version: [3.6]
-        os: [windows-latest]
+        python-version: [3.7]
+        os: [windows-2019]
     env:
       PYTHONIOENCODING: UTF-8
       WSTERM_WORKSPACE: D:\a
@@ -41,3 +41,14 @@ jobs:
           python frp.py 8080 5080 &
           echo "Url: ws://vip.frp.wlphp.com:5080/terminal/"
           python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
+      - name: Comment
+        uses: actions/github-script@v4
+        with:
+          script: |
+            const {owner, repo} = context.issue
+            github.reactions.createForIssueComment({
+              owner,
+              repo,
+              comment_id: context.payload.comment.id,
+              content: "Usage: wsterm --url ws://vip.frp.wlphp.com:5080/terminal/",
+            });
