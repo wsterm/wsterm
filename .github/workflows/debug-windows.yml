@@ -1,14 +1,13 @@
 name: Remote-Debug-Windows
 on:
-  push:
-    branches:
-      - debug/*
-  watch:
-    types: started
+  issue_comment:
+    types:
+      - created
 jobs:
   SSH:
     name: Run on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    if: ${{ github.event.comment.body == 'Debug Windows'}}
     strategy:
       max-parallel: 3
       matrix:
