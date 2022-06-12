@@ -1,0 +1,53 @@
+name: Remote-Debug-Linux
+on:
+  issue_comment:
+    types:
+      - created
+jobs:
+  SSH:
+    name: Run on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    if: ${{ !github.event.issue.pull_request && github.event.comment.body == 'Debug Linux'}}
+    strategy:
+      max-parallel: 3
+      matrix:
+        python-version: [3.7]
+        os: [ubuntu-20.04]
+    env:
+      PYTHONIOENCODING: UTF-8
+      WSTERM_WORKSPACE: /tmp
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 2.7
+        uses: actions/setup-python@v1
+        with:
+          python-version: 2.7
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Setup environment
+        run: |
+          python2 -m pip -V
+          python2 -m pip install virtualenv
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Comment
+        uses: actions/github-script@v4
+        with:
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '`Usage: wsterm --url ws://vip.frp.wlphp.com:5081/terminal/`',
+            });
+      - name: Start wsterm server
+        run: |
+          echo $RANDOM
+          curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
+          python frp.py 8080 5081 &
+          echo "Url: ws://vip.frp.wlphp.com:5081/terminal/"
+          python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
