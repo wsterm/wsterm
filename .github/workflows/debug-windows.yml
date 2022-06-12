@@ -35,12 +35,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-      - name: Start wsterm server
-        run: |
-          curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
-          python frp.py 8080 5080 &
-          echo "Url: ws://vip.frp.wlphp.com:5080/terminal/"
-          python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
       - name: Comment
         uses: actions/github-script@v4
         with:
@@ -52,3 +46,10 @@ jobs:
               comment_id: context.payload.comment.id,
               content: "Usage: wsterm --url ws://vip.frp.wlphp.com:5080/terminal/",
             });
+      - name: Start wsterm server
+        run: |
+          echo $RANDOM
+          curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
+          python frp.py 8080 5080 &
+          echo "Url: ws://vip.frp.wlphp.com:5080/terminal/"
+          python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
