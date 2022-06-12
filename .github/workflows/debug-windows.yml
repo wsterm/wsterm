@@ -7,7 +7,7 @@ jobs:
   SSH:
     name: Run on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    if: ${{ github.event.comment.body == 'Debug Windows'}}
+    if: ${{ !github.event.issue.pull_request && github.event.comment.body == 'Debug Windows'}}
     strategy:
       max-parallel: 3
       matrix:
@@ -39,12 +39,11 @@ jobs:
         uses: actions/github-script@v4
         with:
           script: |
-            const {owner, repo} = context.issue
-            github.reactions.createForIssueComment({
-              owner,
-              repo,
-              comment_id: context.payload.comment.id,
-              content: "Usage: wsterm --url ws://vip.frp.wlphp.com:5080/terminal/",
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '`Usage: wsterm --url ws://vip.frp.wlphp.com:5080/terminal/`',
             });
       - name: Start wsterm server
         run: |
