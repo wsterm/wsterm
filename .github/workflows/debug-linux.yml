@@ -9,7 +9,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: ${{ !github.event.issue.pull_request && github.event.comment.body == 'Debug Linux'}}
     strategy:
-      max-parallel: 3
+      max-parallel: 1
       matrix:
         python-version: [3.7]
         os: [ubuntu-20.04]
@@ -32,8 +32,8 @@ jobs:
           python2 -m pip install virtualenv
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip virtualenv
-          python -m pip install -e .
+          python3 -m pip install --upgrade pip virtualenv
+          python3 -m pip install -e .
       - name: Select port
         run: |
           PORT=`python -c "import random;print(random.randint(1024, 65535))"`
