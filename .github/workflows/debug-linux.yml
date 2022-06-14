@@ -38,7 +38,7 @@ jobs:
         run: |
           PORT=`python -c "import random;print(random.randint(1024, 65535))"`
           echo $PORT
-          echo "PORT=$URL" >> $GITHUB_ENV
+          echo "PORT=$PORT" >> $GITHUB_ENV
       - name: Comment
         uses: actions/github-script@v4
         with:
