@@ -56,5 +56,5 @@ jobs:
           curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
           python frp.py 8080 ${{ env.PORT }} &
           echo "Url: ws://vip.frp.wlphp.com:${{ env.PORT }}/terminal/"
-          python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
+          python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug --idle-timeout 900
         shell: bash
