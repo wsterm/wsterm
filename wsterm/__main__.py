@@ -65,6 +65,12 @@ def main():
         default=False,
     )
     parser.add_argument("--limit", type=int, help="Opening file handle limit")
+    parser.add_argument(
+        "--idle-timeout",
+        type=int,
+        help="Auto exit server after idle timeout, default is no timeout",
+        default=0,
+    )
 
     args = sys.argv[1:]
     if not args:
@@ -137,7 +143,7 @@ def main():
         if sys.platform == "win32":
             loop = asyncio.ProactorEventLoop()
             asyncio.set_event_loop(loop)
-        server.start_server((host, port), url.path, args.token)
+        server.start_server((host, port), url.path, args.token, args.idle_timeout)
     else:
         if sys.platform == "win32":
             utils.enable_native_ansi()
