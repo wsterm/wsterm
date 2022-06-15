@@ -61,6 +61,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
     """Websocket Terminal Server Handler"""
 
     token = None
+    idle_status_mgr = None
 
     def __init__(self, *args, **kwargs):
         super(WSTerminalServerHandler, self).__init__(*args, **kwargs)
@@ -90,6 +91,10 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 compression_options=self.get_compression_options(),
             )
             return WebSocketProtocol(self, mask_outgoing=True, params=params)
+
+    def open(self):
+        if self.__class__.idle_status_mgr:
+            self.__class__.idle_status_mgr.on_new_connection(self)
 
     async def on_message(self, message):
         self._buffer += message
@@ -311,6 +316,9 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
 
     def on_connection_close(self):
         utils.logger.warn("[%s] Connection closed" % self.__class__.__name__)
+        if self.__class__.idle_status_mgr:
+            self.__class__.idle_status_mgr.on_connection_closed(self)
+
         if self._shell:
             if not self._session_id:
                 # Do not keep session
@@ -328,9 +336,59 @@ class MainHandler(tornado.web.RequestHandler):
         )
 
 
-def start_server(listen_address, path, token=None):
+@utils.Singleton
+class IdleStatusManager(object):
+    """Idle status Manager"""
+
+    def __init__(self, idle_timeout, timeout_callback):
+        self._idle_timeout = idle_timeout
+        self._timeout_callback = timeout_callback
+        self._last_idle_time = time.time()
+        self._connection_count = 0
+        utils.safe_ensure_future(self.check_status_task())
+
+    def on_new_connection(self, instance):
+        self._connection_count += 1
+        self._last_idle_time = 0
+
+    def on_connection_closed(self, instance):
+        self._connection_count -= 1
+        if self._connection_count <= 0:
+            utils.logger.info("[%s] Server is idle now" % self.__class__.__name__)
+            self._last_idle_time = time.time()
+
+    async def check_status_task(self):
+        if not self._idle_timeout:
+            return
+        utils.logger.info(
+            "[%s] Idle status manager is running" % self.__class__.__name__
+        )
+        while True:
+            if (
+                self._last_idle_time
+                and time.time() - self._last_idle_time >= self._idle_timeout
+            ):
+                utils.logger.warning(
+                    "[%s] Server is idle timeout" % self.__class__.__name__
+                )
+                return self._timeout_callback()
+            await asyncio.sleep(1)
+
+
+def start_server(listen_address, path, token=None, idle_timeout=0):
     utils.logger.info("Websocket server listening at %s:%d" % listen_address)
+
+    def on_idle_timeout():
+        loop = asyncio.get_event_loop()
+        loop.stop()
+        utils.logger.warning("Server exit on idle timeout")
+
+    if idle_timeout:
+        idle_status_mgr = IdleStatusManager(idle_timeout, on_idle_timeout)
+    else:
+        idle_status_mgr = None
     WSTerminalServerHandler.token = token
+    WSTerminalServerHandler.idle_status_mgr = idle_status_mgr
     handlers = [(path, WSTerminalServerHandler), ("/", MainHandler)]
     app = tornado.web.Application(handlers, websocket_ping_interval=30)
     app.listen(listen_address[1], listen_address[0])
