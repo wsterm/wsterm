@@ -40,6 +40,7 @@ jobs:
           PORT=`python -c "import random;print(random.randint(1024, 65535))"`
           echo $PORT
           echo "PORT=$PORT" >> $GITHUB_ENV
+        shell: bash
       - name: Comment
         uses: actions/github-script@v4
         with:
@@ -56,3 +57,4 @@ jobs:
           python frp.py 8080 ${{ env.PORT }} &
           echo "Url: ws://vip.frp.wlphp.com:${{ env.PORT }}/terminal/"
           python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug
+        shell: bash
