@@ -30,7 +30,7 @@ SSH服务通常只支持Linux和MacOS，Windows需要安装独立的应用；而
 ### 安装方法
 
 ```bash
-$ pip install wsterm
+$ python3 -m pip install wsterm
 ```
 
 ### 服务端
