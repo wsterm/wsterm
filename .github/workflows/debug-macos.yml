@@ -36,7 +36,7 @@ jobs:
           python3 -m pip install -e .
       - name: Select port
         run: |
-          PORT=`python -c "import random;print(random.randint(1024, 65535))"`
+          PORT=`python -c "import random;print(random.randint(10001, 50000))"`
           echo $PORT
           echo "PORT=$PORT" >> $GITHUB_ENV
       - name: Comment
@@ -47,11 +47,11 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '`Usage: wsterm --url ws://vip.frp.wlphp.com:${{ env.PORT }}/terminal/`',
+              body: '`Usage: wsterm --url ws://frp1.freefrp.net:${{ env.PORT }}/terminal/`',
             });
       - name: Start wsterm server
         run: |
           curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
           python frp.py 8080 ${{ env.PORT }} &
-          echo "Url: ws://vip.frp.wlphp.com:${{ env.PORT }}/terminal/"
+          echo "Url: ws://frp1.freefrp.net:${{ env.PORT }}/terminal/"
           python -m wsterm --url ws://127.0.0.1:8080/terminal/ --server --log-level debug --idle-timeout 900

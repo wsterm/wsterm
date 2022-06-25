@@ -162,7 +162,10 @@ class Workspace(object):
     def move_item(self, src_path, dst_path):
         src_path = os.path.join(self._root_path, src_path.replace("/", os.path.sep))
         dst_path = os.path.join(self._root_path, dst_path.replace("/", os.path.sep))
-        os.rename(src_path, dst_path)
+        if os.path.exists(src_path):
+            os.rename(src_path, dst_path)
+        else:
+            utils.logger.warning("[%s] Path %s not exist" % (self.__class__.__name__, src_path))
 
     def register_handler(self, handler):
         self._handlers.append(handler)
