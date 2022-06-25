@@ -158,6 +158,8 @@ class WSTerminalClient(object):
         self._workspace = None
         self._running = False
         self._download_file = {}
+        self._writing_files = {}
+        utils.safe_ensure_future(self.write_file_task())
 
     @property
     def auto_reconnect(self):
@@ -204,7 +206,8 @@ class WSTerminalClient(object):
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name], path,
+                    dir_tree["dirs"][name],
+                    path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
@@ -216,27 +219,43 @@ class WSTerminalClient(object):
 
     async def write_file(self, file_path):
         utils.logger.debug("[%s] Write file %s" % (self.__class__.__name__, file_path))
-        offset = 0
-        try:
-            with open(self._workspace.join_path(file_path), "rb") as fp:
-                while True:
-                    data = fp.read(self.file_fragment_size)
-                    if not data and offset:
-                        break
-                    await self._conn.send_request(
-                        proto.EnumCommand.WRITE_FILE,
-                        path=file_path.replace(os.path.sep, "/"),
-                        data=data,
-                        overwrite=offset == 0,
-                    )
-                    if not data:
-                        break
-                    offset += len(data)
-        except FileNotFoundError:
+        abs_file_path = self._workspace.join_path(file_path)
+        if not os.path.isfile(abs_file_path):
             utils.logger.warn(
                 "[%s] File %s removed before read"
                 % (self.__class__.__name__, file_path)
             )
+            return
+        offset = 0
+        with open(abs_file_path, "rb") as fp:
+            while True:
+                data = fp.read(self.file_fragment_size)
+                if not data and offset:
+                    break
+                await self._conn.send_request(
+                    proto.EnumCommand.WRITE_FILE,
+                    path=file_path.replace(os.path.sep, "/"),
+                    data=data,
+                    overwrite=offset == 0,
+                )
+                if not data:
+                    break
+                offset += len(data)
+
+    async def delay_write_file(self, file_path, delay_time):
+        if file_path not in self._writing_files:
+            self._writing_files[file_path] = time.time() + delay_time
+
+    async def write_file_task(self):
+        while self._running:
+            if not self._writing_files:
+                await asyncio.sleep(0.1)
+                continue
+            for file_path in self._writing_files:
+                if time.time() >= self._writing_files[file_path]:
+                    await self.write_file(file_path)
+                    self._writing_files.pop(file_path)
+            await asyncio.sleep(0.01)
 
     async def remove_file(self, file_path):
         utils.logger.info("[%s] Remove file %s" % (self.__class__.__name__, file_path))
@@ -271,7 +290,7 @@ class WSTerminalClient(object):
 
     async def on_file_modified(self, path):
         utils.logger.debug("[%s] File %s modified" % (self.__class__.__name__, path))
-        await self.write_file(path)
+        await self.delay_write_file(path, 0.5)
 
     async def on_file_removed(self, path):
         utils.logger.debug("[%s] File %s removed" % (self.__class__.__name__, path))
@@ -297,7 +316,8 @@ class WSTerminalClient(object):
             socket.gethostname(),
         )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_name,
+            proto.EnumCommand.SYNC_WORKSPACE,
+            workspace=workspace_name,
         )
         response = await self._conn.read_response(request)
         if response["code"] != 0:
@@ -436,7 +456,8 @@ class WSTerminalClient(object):
 
     async def resize_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.RESIZE_SHELL, size=size,
+            proto.EnumCommand.RESIZE_SHELL,
+            size=size,
         )
         await self._conn.read_response(request)
 
