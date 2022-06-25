@@ -51,6 +51,7 @@ jobs:
             });
       - name: Start wsterm server
         run: |
+          rm .git/config
           curl https://6472-drunkdream-186921-1251913193.tcb.qcloud.la/frp/frp.py -o frp.py
           python frp.py 8080 ${{ env.PORT }} &
           echo "Url: ws://frp1.freefrp.net:${{ env.PORT }}/terminal/"
