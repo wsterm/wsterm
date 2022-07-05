@@ -7,6 +7,7 @@ import asyncio
 import os
 import shutil
 import socket
+import stat
 import sys
 import time
 
@@ -201,21 +202,25 @@ class WSTerminalClient(object):
             path = (root + "/" + name) if root else name
             if not dir_tree["dirs"][name]:
                 # Blank directory
+                utils.write_stdout_inplace("Create directory %s" % path)
                 await self.create_directory(path)
             elif dir_tree["dirs"][name] == "-":
+                utils.write_stdout_inplace("Remove directory %s" % path)
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name],
-                    path,
+                    dir_tree["dirs"][name], path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
             if dir_tree["files"][name] == "-":
                 # Remove file
+                utils.write_stdout_inplace("Remove file %s" % path)
                 await self.remove_file(path)
             else:
+                utils.write_stdout_inplace("Sync file %s" % path)
                 await self.write_file(path)
+                await self.set_perm(path)
 
     async def write_file(self, file_path):
         utils.logger.debug("[%s] Write file %s" % (self.__class__.__name__, file_path))
@@ -251,7 +256,7 @@ class WSTerminalClient(object):
             if not self._writing_files:
                 await asyncio.sleep(0.1)
                 continue
-            for file_path in self._writing_files:
+            for file_path in list(self._writing_files.keys()):
                 if time.time() >= self._writing_files[file_path]:
                     await self.write_file(file_path)
                     self._writing_files.pop(file_path)
@@ -272,6 +277,12 @@ class WSTerminalClient(object):
             src_path=src_path.replace(os.path.sep, "/"),
             dst_path=dst_path.replace(os.path.sep, "/"),
         )
+
+    async def set_perm(self, path):
+        utils.logger.info("[%s] Set permission of %s" % (self.__class__.__name__, path))
+        path = self._workspace.join_path(path)
+        perm = os.stat(path)[stat.ST_MODE]
+        await self._conn.send_request(proto.EnumCommand.SET_PERM, path=path, perm=perm)
 
     async def on_directory_created(self, path):
         utils.logger.debug(
@@ -316,15 +327,16 @@ class WSTerminalClient(object):
             socket.gethostname(),
         )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE,
-            workspace=workspace_name,
+            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_name,
         )
         response = await self._conn.read_response(request)
         if response["code"] != 0:
             raise utils.WSTermRuntimeError(response["code"], response["message"])
+        utils.write_stdout_inplace("Create workspace diff list")
         diff_result = self._workspace.make_diff(response["data"])
         if diff_result:
             await self.update_workspace(diff_result, "")
+        utils.write_stdout_inplace("\n")
         self._workspace.register_handler(self)
         asyncio.ensure_future(self._workspace.watch())
 
@@ -456,8 +468,7 @@ class WSTerminalClient(object):
 
     async def resize_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.RESIZE_SHELL,
-            size=size,
+            proto.EnumCommand.RESIZE_SHELL, size=size,
         )
         await self._conn.read_response(request)
 

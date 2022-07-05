@@ -167,6 +167,11 @@ class Workspace(object):
         else:
             utils.logger.warning("[%s] Path %s not exist" % (self.__class__.__name__, src_path))
 
+    def set_perm(self, path, perm):
+        path = os.path.join(self._root_path, path.replace("/", os.path.sep))
+        if os.path.exists(path):
+            os.chmod(path, perm)
+
     def register_handler(self, handler):
         self._handlers.append(handler)
 

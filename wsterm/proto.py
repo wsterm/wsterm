@@ -21,6 +21,7 @@ class EnumCommand(object):
     WRITE_FILE = "write-file"
     REMOVE_FILE = "remove-file"
     MOVE_ITEM = "move-item"
+    SET_PERM = "set-perm"
 
     CREATE_SHELL = "create-shell"
     WRITE_STDIN = "write-stdin"

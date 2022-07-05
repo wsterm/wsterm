@@ -148,8 +148,7 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
             self._workspace = workspace.Workspace(workspace_path)
             data = self._workspace.snapshot()
             await self.send_response(
-                request,
-                data=data,
+                request, data=data,
             )
         elif self._workspace and request["command"] == proto.EnumCommand.WRITE_FILE:
             utils.logger.info(
@@ -179,6 +178,12 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 % (self.__class__.__name__, request["src_path"], request["dst_path"])
             )
             self._workspace.move_item(request["src_path"], request["dst_path"])
+        elif self._workspace and request["command"] == proto.EnumCommand.SET_PERM:
+            utils.logger.info(
+                "[%s] Set item %s permission %s"
+                % (self.__class__.__name__, request["path"], request["perm"])
+            )
+            self._workspace.set_perm(request["path"], request["perm"])
         elif request["command"] == proto.EnumCommand.CREATE_SHELL:
             session_id = request.get("session")
             session_timeout = request.get("timeout")
