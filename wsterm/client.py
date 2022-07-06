@@ -280,9 +280,12 @@ class WSTerminalClient(object):
 
     async def set_perm(self, path):
         utils.logger.info("[%s] Set permission of %s" % (self.__class__.__name__, path))
-        path = self._workspace.join_path(path)
-        perm = os.stat(path)[stat.ST_MODE]
-        await self._conn.send_request(proto.EnumCommand.SET_PERM, path=path, perm=perm)
+        abs_path = self._workspace.join_path(path)
+        permission = os.stat(abs_path).st_mode & 0o777
+        if permission & stat.S_IXOTH:
+            await self._conn.send_request(
+                proto.EnumCommand.SET_PERM, path=path, perm=permission
+            )
 
     async def on_directory_created(self, path):
         utils.logger.debug(
