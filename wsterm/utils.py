@@ -338,3 +338,9 @@ def safe_import(module_name, attr):
     if not module:
         raise ImportError("No module named %r" % module_name)
     return module
+
+
+def write_stdout_inplace(content):
+    sys.stdout.write("\r" + " " * 80)
+    sys.stdout.write("\r" + content[:80])
+    sys.stdout.flush()
