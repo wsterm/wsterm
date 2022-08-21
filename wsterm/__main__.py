@@ -16,6 +16,17 @@ import tornado.ioloop
 from . import client, server, utils
 
 
+def get_event_loop():
+    if hasattr(asyncio, "_get_running_loop"):
+        loop = asyncio._get_running_loop()
+        if not loop:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
+    return loop
+
+
 async def connect_server(url, workspace, token=None, auto_reconnect=False):
     print("Connecting to remote terminal %s" % url)
     if workspace:
@@ -148,7 +159,7 @@ def main():
         if sys.platform == "win32":
             utils.enable_native_ansi()
 
-        if not asyncio.get_event_loop().run_until_complete(
+        if not get_event_loop().run_until_complete(
             connect_server(args.url, args.workspace, args.token, args.auto_reconnect)
         ):
             return -1
@@ -167,7 +178,7 @@ def main():
         if not args.server:
             loop.stop()
 
-    loop = asyncio.get_event_loop()
+    loop = get_event_loop()
     loop.set_exception_handler(handle_exception)
 
     try:
