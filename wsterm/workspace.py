@@ -83,7 +83,7 @@ class File(object):
 
 class Workspace(object):
     def __init__(self, root_path):
-        self._root_path = os.path.abspath(root_path)
+        self._root_path = os.path.realpath(root_path)
         if not os.path.isdir(self._root_path):
             os.makedirs(self._root_path)
         self._handlers = []
