@@ -17,6 +17,11 @@ jobs:
       PYTHONIOENCODING: UTF-8
       WSTERM_WORKSPACE: /tmp
     steps:
+      - name: Create Cache
+        uses: actions/cache@v3
+        with:
+          path: cache
+          key: ${{ runner.os }}-cache
       - uses: actions/checkout@v2
       - name: Set up Python 2.7
         uses: actions/setup-python@v1
