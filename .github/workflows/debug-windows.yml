@@ -20,7 +20,7 @@ jobs:
       - name: Create Cache
         uses: actions/cache@v3
         with:
-          path: ~/wsterm-cache
+          path: D:\wsterm-cache
           key: ${{ runner.os }}-cache-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-cache-
