@@ -80,7 +80,7 @@ def main():
     args = parser.parse_args(args)
 
     url = urllib.parse.urlparse(args.url)
-    if url.scheme != "ws":
+    if url.scheme not in ("ws", "wss"):
         print("Error: Invalid websocket url %s" % args.url, file=sys.stderr)
         return -1
 
