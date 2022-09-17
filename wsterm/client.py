@@ -47,9 +47,11 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
     async def headers_received(self, start_line, headers):
         await super(WSTerminalConnection, self).headers_received(start_line, headers)
         if start_line.code != 101:
+            message = "Connect %s return %d %s" % (self._url, start_line.code, start_line.reason)
+            print(message, file=sys.stderr)
             utils.logger.error(
-                "[%s] Connect %s return %d"
-                % (self.__class__.__name__, self._url, start_line.code)
+                "[%s] %s"
+                % (self.__class__.__name__, message)
             )
             self._connected = False
         else:
