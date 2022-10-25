@@ -314,7 +314,7 @@ class WSTerminalClient(object):
 
     async def on_item_moved(self, src_path, dst_path):
         utils.logger.debug(
-            "[%s] Item %s moved from %s to %s"
+            "[%s] Item moved from %s to %s"
             % (self.__class__.__name__, src_path, dst_path)
         )
         await self.move_item(src_path, dst_path)
