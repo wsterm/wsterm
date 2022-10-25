@@ -1,4 +1,4 @@
-msgpack
+msgpack==1.0.4
 python-daemon
 tornado==6.1
 gitignore_parser==0.0.8
