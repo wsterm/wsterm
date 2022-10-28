@@ -4,8 +4,10 @@
 name: Upload Python Package
 
 on:
-  release:
-    types: [created]
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*'
 
 jobs:
   deploy:
