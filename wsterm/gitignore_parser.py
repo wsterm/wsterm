@@ -141,7 +141,7 @@ class IgnoreRule(collections.namedtuple('IgnoreRule_', IGNORE_RULE_FIELDS)):
             rel_path = str(Path(abs_path))
         if rel_path.startswith('./'):
             rel_path = rel_path[2:]
-        if re.search(self.regex, rel_path):
+        if re.search(self.regex, rel_path.replace(os.sep, "/")):
             matched = True
         return matched
 
