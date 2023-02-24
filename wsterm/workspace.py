@@ -6,9 +6,7 @@ import os
 import pathlib
 import shutil
 
-import gitignore_parser
-
-from . import aiowatch, utils
+from . import aiowatch, gitignore_parser, utils
 
 
 class EnumEvent(object):
@@ -98,7 +96,7 @@ class Workspace(object):
 
     def _build_ignore_rules(self):
         gitignore_path = os.path.join(self._root_path, ".gitignore")
-        ignore_text = ".git/\n.env2/\n.env3/\n*.pyc\n"
+        ignore_text = ".git/\n.env*/\n*.pyc\n"
         if os.path.isfile(gitignore_path):
             with open(gitignore_path) as fp:
                 ignore_text += fp.read()
