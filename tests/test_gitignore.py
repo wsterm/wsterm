@@ -15,7 +15,6 @@ class Test(TestCase):
             '*.py[cod]',
             fake_base_dir='/home/michael'
         )
-        print(matches)
         self.assertFalse(matches('/home/michael/main.py'))
         self.assertTrue(matches('/home/michael/main.pyc'))
         self.assertTrue(matches('/home/michael/dir/main.pyc'))
