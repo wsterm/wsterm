@@ -319,10 +319,10 @@ class WSTerminalClient(object):
         )
         await self.move_item(src_path, dst_path)
 
-    async def sync_workspace(self, workspace_path):
+    async def sync_workspace(self, workspace_path, ignore_paths=None):
         if not os.path.isdir(workspace_path):
             raise RuntimeError("Workspace %s not exist" % workspace_path)
-        self._workspace = workspace.Workspace(workspace_path)
+        self._workspace = workspace.Workspace(workspace_path, ignore_paths)
         workspace_hash = utils.make_short_hash(
             "%s%s" % (socket.gethostname(), workspace_path)
         )

@@ -80,10 +80,11 @@ class File(object):
 
 
 class Workspace(object):
-    def __init__(self, root_path):
+    def __init__(self, root_path, ignore_paths=None):
         self._root_path = os.path.realpath(root_path)
         if not os.path.isdir(self._root_path):
             os.makedirs(self._root_path)
+        self._ignore_paths = ignore_paths
         self._handlers = []
         self._ignore_rules = []
         self._build_ignore_rules()
@@ -97,6 +98,9 @@ class Workspace(object):
     def _build_ignore_rules(self):
         gitignore_path = os.path.join(self._root_path, ".gitignore")
         ignore_text = ".git/\n.env*/\n*.pyc\n"
+        if self._ignore_paths:
+            for path in self._ignore_paths:
+                ignore_text += path + "\n"
         if os.path.isfile(gitignore_path):
             with open(gitignore_path) as fp:
                 ignore_text += fp.read()
