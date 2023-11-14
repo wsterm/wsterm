@@ -357,7 +357,7 @@ class WSTerminalClient(object):
     async def on_shell_stdout(self, buffer):
         if buffer.endswith(b"**\x18B00000000000000\r\x8a\x11"):
             sys.stdout.buffer.write(
-                b"Starting zmodem transfer.  Press Ctrl+C to cancel.\n"
+                b"Starting zmodem transfer.  Press Ctrl+C to cancel.\r\n"
             )
             sys.stdout.flush()
             buffer = b"**\x18B01000000039a32\n\n"
@@ -369,8 +369,9 @@ class WSTerminalClient(object):
             self._download_file["size"] = int(buffer[pos + 1 : pos2])
             self._download_file["buffer"] = b""
             sys.stdout.buffer.write(
-                b"Transferring %s...\n" % self._download_file["name"].encode()
+                b"Transferring %s...\r\n" % self._download_file["name"].encode()
             )
+            sys.stdout.flush()
             buffer = b"**\x18B0900000000a87c\n\n"
             await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
         elif self._download_file.get("name"):
@@ -379,7 +380,7 @@ class WSTerminalClient(object):
             if buffer.startswith(b"*\x18A\n\x00\x00\x00\x00F\xae"):
                 pos = buffer.find(b"\x18h", 10)
                 if pos > 0:
-                    buffer = buffer[10 : pos + 1]
+                    buffer = buffer[10 : pos + 2]
                 else:
                     buffer = buffer[10:]
                 self._download_file["buffer"] += buffer
@@ -390,6 +391,8 @@ class WSTerminalClient(object):
                 b"\r%d/%d"
                 % (len(self._download_file["buffer"]), self._download_file["size"])
             )
+            sys.stdout.flush()
+
             if (
                 len(self._download_file["buffer"]) >= self._download_file["size"]
                 and b"\x18h" in buffer
@@ -437,6 +440,12 @@ class WSTerminalClient(object):
                 for key in mapping_table:
                     buffer = buffer.replace(key, mapping_table[key])
 
+                sys.stdout.buffer.write(
+                    b"\r%d/%d"
+                    % (len(buffer), self._download_file["size"])
+                )
+                sys.stdout.flush()
+
                 with open(self._download_file["name"], "wb") as fp:
                     fp.write(buffer)
 
@@ -445,6 +454,7 @@ class WSTerminalClient(object):
                 await self._conn.send_request(
                     proto.EnumCommand.WRITE_STDIN, buffer=buffer
                 )
+                sys.stdout.buffer.write(b"\r\n")
         else:
             sys.stdout.buffer.write(buffer)
             sys.stdout.flush()
