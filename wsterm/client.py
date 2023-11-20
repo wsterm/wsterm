@@ -4,7 +4,10 @@
 """
 
 import asyncio
+import base64
+import json
 import os
+import random
 import shutil
 import socket
 import stat
@@ -15,6 +18,9 @@ import tornado.httputil
 import tornado.websocket
 
 from . import proto, utils, workspace
+
+WSTERM_MESSAGE_START_TAG = b"<WSTERM_MESSAGE>"
+WSTERM_MESSAGE_END_TAG = b"</WSTERM_MESSAGE>"
 
 
 class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
@@ -47,12 +53,13 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
     async def headers_received(self, start_line, headers):
         await super(WSTerminalConnection, self).headers_received(start_line, headers)
         if start_line.code != 101:
-            message = "Connect %s return %d %s" % (self._url, start_line.code, start_line.reason)
-            print(message, file=sys.stderr)
-            utils.logger.error(
-                "[%s] %s"
-                % (self.__class__.__name__, message)
+            message = "Connect %s return %d %s" % (
+                self._url,
+                start_line.code,
+                start_line.reason,
             )
+            print(message, file=sys.stderr)
+            utils.logger.error("[%s] %s" % (self.__class__.__name__, message))
             self._connected = False
         else:
             self._connected = True
@@ -141,7 +148,7 @@ class WSTerminalConnection(tornado.websocket.WebSocketClientConnection):
 
 
 class WSTerminalClient(object):
-    """Websocket Teminal Client"""
+    """Websocket Terminal Client"""
 
     session_timeout = 10 * 60
     file_fragment_size = 4 * 1024 * 1024
@@ -162,6 +169,7 @@ class WSTerminalClient(object):
         self._running = False
         self._download_file = {}
         self._writing_files = {}
+        self._shell_stdout_buffer = bytearray()
         utils.safe_ensure_future(self.write_file_task())
 
     @property
@@ -354,12 +362,76 @@ class WSTerminalClient(object):
             )
             self.on_connection_close()
 
-    async def on_shell_stdout(self, buffer):
+    async def on_file_message(self, message):
+        if message["Name"] == "CreateFileStream":
+            if not isinstance(message["Body"], dict):
+                return
+            self._download_file["name"] = message["Body"]["Name"]
+            self._download_file["size"] = message["Body"]["Size"]
+            self._download_file["buffer"] = bytearray()
+            self._download_file["mode"] = "wsterm"
+            self._download_file["stream_id"] = str(random.randint(0x10000, 0xFFFFF))
+            self._download_file["start_time"] = time.time()
+            self._download_file["saved_bytes"] = 0
+            message["Body"] = self._download_file["stream_id"]
+            await self._conn.send_request(
+                proto.EnumCommand.WRITE_STDIN,
+                buffer=WSTERM_MESSAGE_START_TAG
+                + json.dumps(message).encode()
+                + WSTERM_MESSAGE_END_TAG
+                + b"\r\n",
+            )
+            sys.stdout.buffer.write(
+                b"Starting wsterm file transfer.  Press Ctrl+C to cancel.\r\n"
+            )
+            with open(self._download_file["name"], "wb") as fp:
+                pass
+        elif message["Name"] == "SendFileData":
+            if message["Body"]["StreamId"] != self._download_file["stream_id"]:
+                utils.logger.warning(
+                    "[%s] Invalid stream id %s"
+                    % (self.__class__.__name__, message["Body"]["StreamId"])
+                )
+                return
+
+            self._download_file["buffer"].extend(
+                base64.b64decode(message["Body"]["Buffer"])
+            )
+            duration = time.time() - self._download_file["start_time"]
+            read_bytes = self._download_file["saved_bytes"] + len(
+                self._download_file["buffer"]
+            )
+            sys.stdout.buffer.write(
+                b"\r%d/%d %.1fKB/s %.2f%% %ds"
+                % (
+                    read_bytes,
+                    self._download_file["size"],
+                    read_bytes / (duration * 1024),
+                    100 * read_bytes / self._download_file["size"],
+                    int(duration),
+                )
+            )
+            if len(self._download_file["buffer"]) >= 10 * 1024 * 1024:
+                with open(self._download_file["name"], "ab") as fp:
+                    fp.write(self._download_file["buffer"])
+                self._download_file["saved_bytes"] += len(self._download_file["buffer"])
+                self._download_file["buffer"] = bytearray()
+        elif message["Name"] == "CloseFileStream":
+            if self._download_file["buffer"]:
+                with open(self._download_file["name"], "ab") as fp:
+                    fp.write(self._download_file["buffer"])
+
+            sys.stdout.write(
+                "\r\nFile saved to %s\r\n"
+                % os.path.abspath(self._download_file["name"])
+            )
+            self._download_file = {}
+
+    async def _on_shell_stdout(self, buffer):
         if buffer.endswith(b"**\x18B00000000000000\r\x8a\x11"):
             sys.stdout.buffer.write(
                 b"Starting zmodem transfer.  Press Ctrl+C to cancel.\r\n"
             )
-            sys.stdout.flush()
             buffer = b"**\x18B01000000039a32\n\n"
             await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
         elif buffer.startswith(b"*\x18A\x04\x00\x00\x00\x00\x89\x06"):
@@ -368,13 +440,15 @@ class WSTerminalClient(object):
             pos2 = buffer.find(b" ", pos)
             self._download_file["size"] = int(buffer[pos + 1 : pos2])
             self._download_file["buffer"] = b""
+            self._download_file["mode"] = "zmodem"
             sys.stdout.buffer.write(
                 b"Transferring %s...\r\n" % self._download_file["name"].encode()
             )
-            sys.stdout.flush()
             buffer = b"**\x18B0900000000a87c\n\n"
             await self._conn.send_request(proto.EnumCommand.WRITE_STDIN, buffer=buffer)
-        elif self._download_file.get("name"):
+        elif (
+            self._download_file.get("name") and self._download_file["mode"] == "zmodem"
+        ):
             # download file
 
             if buffer.startswith(b"*\x18A\n\x00\x00\x00\x00F\xae"):
@@ -391,7 +465,6 @@ class WSTerminalClient(object):
                 b"\r%d/%d"
                 % (len(self._download_file["buffer"]), self._download_file["size"])
             )
-            sys.stdout.flush()
 
             if (
                 len(self._download_file["buffer"]) >= self._download_file["size"]
@@ -441,10 +514,8 @@ class WSTerminalClient(object):
                     buffer = buffer.replace(key, mapping_table[key])
 
                 sys.stdout.buffer.write(
-                    b"\r%d/%d"
-                    % (len(buffer), self._download_file["size"])
+                    b"\r%d/%d" % (len(buffer), self._download_file["size"])
                 )
-                sys.stdout.flush()
 
                 with open(self._download_file["name"], "wb") as fp:
                     fp.write(buffer)
@@ -457,7 +528,52 @@ class WSTerminalClient(object):
                 sys.stdout.buffer.write(b"\r\n")
         else:
             sys.stdout.buffer.write(buffer)
-            sys.stdout.flush()
+
+    async def on_shell_stdout(self, buffer):
+        self._shell_stdout_buffer.extend(buffer)
+        self._shell_stdout_buffer = self._shell_stdout_buffer.replace(
+            b"\x08\r\n", b""
+        )  # Remove char auto added on windows
+        while self._shell_stdout_buffer:
+            pos = self._shell_stdout_buffer.find(WSTERM_MESSAGE_START_TAG)
+            if pos > 0:
+                buffer = self._shell_stdout_buffer[:pos]
+                if buffer.strip():
+                    await self._on_shell_stdout(buffer)
+                self._shell_stdout_buffer = self._shell_stdout_buffer[pos:]
+                continue
+            elif pos == 0:
+                pos2 = self._shell_stdout_buffer.find(WSTERM_MESSAGE_END_TAG)
+                if pos2 < 0:
+                    return
+                message = self._shell_stdout_buffer[
+                    len(WSTERM_MESSAGE_START_TAG) : pos2
+                ]
+                message = message.replace(b"\r", b"").replace(b"\n", b"").decode()
+                try:
+                    message = json.loads(message)
+                except Exception as ex:
+                    utils.logger.warning(
+                        "[%s] Invalid json data %s: %s"
+                        % (self.__class__.__name__, message, ex)
+                    )
+                else:
+                    await self.on_file_message(message)
+                self._shell_stdout_buffer = self._shell_stdout_buffer[
+                    pos2 + len(WSTERM_MESSAGE_END_TAG) :
+                ]
+                continue
+            else:
+                if (
+                    self._download_file.get("name")
+                    and self._download_file.get("mode") == "wsterm"
+                ):
+                    break
+                await self._on_shell_stdout(self._shell_stdout_buffer)
+                self._shell_stdout_buffer = bytearray()
+                break
+
+        sys.stdout.flush()
 
     def on_shell_exit(self):
         self._running = False
