@@ -110,7 +110,7 @@ class Workspace(object):
                 continue
 
             rule = gitignore_parser.rule_from_pattern(
-                line, base_path=pathlib.Path(self._root_path), source=None
+                line, base_path=pathlib.Path(self._root_path).resolve(), source=None
             )
             if rule:
                 self._ignore_rules.append(rule)
