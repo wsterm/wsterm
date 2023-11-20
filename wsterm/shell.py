@@ -38,7 +38,7 @@ class Shell(object):
         return self._stderr
 
     @classmethod
-    def add_bin_path():
+    def add_bin_path(cls):
         module_path = os.path.dirname(__file__)
         bin_path = os.path.join(module_path, "bin", sys.platform)
         if os.path.isdir(bin_path) and bin_path not in os.environ["PATH"]:
