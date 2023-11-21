@@ -38,8 +38,19 @@ class Shell(object):
         return self._stderr
 
     @classmethod
+    def add_bin_path(cls):
+        module_path = os.path.dirname(__file__)
+        bin_path = os.path.join(module_path, "bin", sys.platform)
+        if os.path.isdir(bin_path) and bin_path not in os.environ["PATH"]:
+            if sys.platform == "win32":
+                os.environ["PATH"] += ";" + bin_path
+            else:
+                os.environ["PATH"] += ":" + bin_path
+
+    @classmethod
     async def create(cls, workspace, size=None):
         size = size or (80, 23)
+        cls.add_bin_path()
         if sys.platform == "win32":
             if hasattr(ctypes.windll.kernel32, "CreatePseudoConsole"):
                 cmd = (

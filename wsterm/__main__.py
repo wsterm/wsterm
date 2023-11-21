@@ -16,7 +16,7 @@ import tornado.ioloop
 from . import client, server, utils
 
 
-async def connect_server(url, workspace, token=None, auto_reconnect=False):
+async def connect_server(url, workspace, token=None, auto_reconnect=False, ignore_paths=None):
     print("Connecting to remote terminal %s" % url)
     if workspace:
         workspace = os.path.abspath(workspace)
@@ -28,7 +28,7 @@ async def connect_server(url, workspace, token=None, auto_reconnect=False):
 
         if workspace:
             print("Sync workspace to remote host...")
-            await cli.sync_workspace(workspace)
+            await cli.sync_workspace(workspace, ignore_paths)
             print("Sync workspace complete")
         terminal_size = shutil.get_terminal_size((120, 30))
         await cli.create_shell((terminal_size.columns, terminal_size.lines))
@@ -70,6 +70,11 @@ def main():
         type=int,
         help="Auto exit server after idle timeout, default is no timeout",
         default=0,
+    )
+    parser.add_argument(
+        "--ignore",
+        help="Ignore path in workspace",
+        action="append",
     )
 
     args = sys.argv[1:]
@@ -149,7 +154,7 @@ def main():
             utils.enable_native_ansi()
 
         if not asyncio.get_event_loop().run_until_complete(
-            connect_server(args.url, args.workspace, args.token, args.auto_reconnect)
+            connect_server(args.url, args.workspace, args.token, args.auto_reconnect, args.ignore)
         ):
             return -1
 

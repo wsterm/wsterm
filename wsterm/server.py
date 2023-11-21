@@ -307,12 +307,15 @@ class WSTerminalServerHandler(tornado.websocket.WebSocketHandler):
                 if self._shell:
                     if sys.platform == "win32":
                         try:
-                            buffer = buffer.decode("gbk").encode("utf-8")  # TODO: fixme
+                            buffer.decode("utf-8")
                         except UnicodeDecodeError:
-                            utils.logger.warn(
-                                "[%s] Decode buffer %r failed"
-                                % (self.__class__.__name__, buffer)
-                            )
+                            try:
+                                buffer = buffer.decode("gbk").encode("utf-8")  # TODO: fixme
+                            except UnicodeDecodeError:
+                                utils.logger.warn(
+                                    "[%s] Decode buffer %r failed"
+                                    % (self.__class__.__name__, buffer)
+                                )
                     await self.write_shell_stdout(buffer)
         utils.logger.warn("[%s] Shell process exit" % self.__class__.__name__)
         if self._shell:

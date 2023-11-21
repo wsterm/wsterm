@@ -106,6 +106,7 @@ def rule_from_pattern(pattern, base_path=None, source=None):
     regex = fnmatch_pathname_to_regex(pattern, directory_only)
     if anchored:
         regex = ''.join(['^', regex])
+    regex = regex.replace('^(?ms)', '(?ms)^')
     return IgnoreRule(
         pattern=orig_pattern,
         regex=regex,
