@@ -1,4 +1,5 @@
 msgpack==1.0.4
 python-daemon
 tornado==6.1
-pywin32==228; sys_platform == 'win32'
+pywin32==228; sys_platform == 'win32' and python_version <= '3.7'
+pywin32==306; sys_platform == 'win32' and python_version > '3.7'
