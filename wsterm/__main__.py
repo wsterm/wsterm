@@ -13,7 +13,7 @@ import urllib.parse
 
 import tornado.ioloop
 
-from . import client, server, utils
+from . import VERSION, client, server, utils
 
 
 async def connect_server(url, workspace, token=None, auto_reconnect=False, ignore_paths=None):
@@ -40,7 +40,7 @@ async def connect_server(url, workspace, token=None, auto_reconnect=False, ignor
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="wsterm", description="Websocket terminal tool."
+        prog="wsterm", description="Websocket terminal tool(v%s)." % VERSION
     )
     parser.add_argument("--url", help="Websocket url", required=True)
     parser.add_argument(
