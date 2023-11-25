@@ -33,6 +33,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/wsterm/wsterm",
     packages=find_packages(),
+    include_package_data=True,
     python_requires=">=3.5",
     install_requires=REQUIREMENTS,
     extras_require={},

@@ -41,11 +41,15 @@ class Shell(object):
     def add_bin_path(cls):
         module_path = os.path.dirname(__file__)
         bin_path = os.path.join(module_path, "bin", sys.platform)
-        if os.path.isdir(bin_path) and bin_path not in os.environ["PATH"]:
-            if sys.platform == "win32":
-                os.environ["PATH"] += ";" + bin_path
-            else:
-                os.environ["PATH"] += ":" + bin_path
+        if os.path.isdir(bin_path):
+            if bin_path not in os.environ["PATH"]:
+                if sys.platform == "win32":
+                    os.environ["PATH"] += ";" + bin_path
+                else:
+                    os.environ["PATH"] += ":" + bin_path
+            if sys.platform != "win32":
+                for it in os.listdir(bin_path):
+                    os.chmod(os.path.join(bin_path, it), 0o755)
 
     @classmethod
     async def create(cls, workspace, size=None):

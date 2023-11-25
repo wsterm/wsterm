@@ -219,7 +219,8 @@ class WSTerminalClient(object):
                 await self.remove_directory(path)
             else:
                 await self.update_workspace(
-                    dir_tree["dirs"][name], path,
+                    dir_tree["dirs"][name],
+                    path,
                 )
         for name in dir_tree.get("files", {}):
             path = (root + "/" + name) if root else name
@@ -340,7 +341,8 @@ class WSTerminalClient(object):
             socket.gethostname(),
         )
         request = await self._conn.send_request(
-            proto.EnumCommand.SYNC_WORKSPACE, workspace=workspace_name,
+            proto.EnumCommand.SYNC_WORKSPACE,
+            workspace=workspace_name,
         )
         response = await self._conn.read_response(request)
         if response["code"] != 0:
@@ -366,6 +368,25 @@ class WSTerminalClient(object):
         if message["Name"] == "CreateFileStream":
             if not isinstance(message["Body"], dict):
                 return
+            try:
+                with open(message["Body"]["Name"], "wb") as fp:
+                    pass
+            except PermissionError as ex:
+                sys.stdout.write(
+                    "Write file %s failed: %s\n" % (message["Body"]["Name"], ex)
+                )
+                message = {
+                    "Name": "CloseFileStream",
+                    "Body": ""
+                }
+                await self._conn.send_request(
+                    proto.EnumCommand.WRITE_STDIN,
+                    buffer=WSTERM_MESSAGE_START_TAG
+                    + json.dumps(message).encode()
+                    + WSTERM_MESSAGE_END_TAG
+                    + b"\r\n",
+                )
+                return
             self._download_file["name"] = message["Body"]["Name"]
             self._download_file["size"] = message["Body"]["Size"]
             self._download_file["buffer"] = bytearray()
@@ -384,8 +405,6 @@ class WSTerminalClient(object):
             sys.stdout.buffer.write(
                 b"Starting wsterm file transfer.  Press Ctrl+C to cancel.\r\n"
             )
-            with open(self._download_file["name"], "wb") as fp:
-                pass
         elif message["Name"] == "SendFileData":
             if message["Body"]["StreamId"] != self._download_file["stream_id"]:
                 utils.logger.warning(
@@ -417,6 +436,11 @@ class WSTerminalClient(object):
                 self._download_file["saved_bytes"] += len(self._download_file["buffer"])
                 self._download_file["buffer"] = bytearray()
         elif message["Name"] == "CloseFileStream":
+            if "buffer" not in self._download_file:
+                sys.stdout.write("Transfer file cancelled\r\n")
+                self._download_file = {}
+                return
+
             if self._download_file["buffer"]:
                 with open(self._download_file["name"], "ab") as fp:
                     fp.write(self._download_file["buffer"])
@@ -599,7 +623,8 @@ class WSTerminalClient(object):
 
     async def resize_shell(self, size):
         request = await self._conn.send_request(
-            proto.EnumCommand.RESIZE_SHELL, size=size,
+            proto.EnumCommand.RESIZE_SHELL,
+            size=size,
         )
         await self._conn.read_response(request)
 
