@@ -24,7 +24,7 @@ jobs:
           key: ${{ runner.os }}-cache-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-cache-
-      # - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
       # - name: Set up Python 2.7
       #   uses: actions/setup-python@v1
       #   with:
