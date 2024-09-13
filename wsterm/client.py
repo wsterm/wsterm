@@ -705,6 +705,8 @@ class WSTerminalClient(object):
                         char = b"\x03"
                         asyncio.ensure_future(self.write_shell_stdin(char))
                         continue
+                    elif char == b"\x08":
+                        char = b"\x7f"
 
                     if line_editor:
                         line = line_editor.input(char)
